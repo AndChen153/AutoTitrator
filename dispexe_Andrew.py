@@ -38,51 +38,15 @@ import pickle
 from w1thermsensor import W1ThermSensor
 #from sklearn.neighbors import KNeighborsClassifier
 
+from dispexe_Motors import dispexeMotors
+from dispexe_Valve import dispexeValve 
 
-# GPIO setup-----------------------------------------------
-# Motor 1
-mot1_step = 11
-mot1_Dir = 13
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BOARD)
-GPIO.setup(mot1_step, GPIO.OUT)
-GPIO.setup(mot1_Dir, GPIO.OUT)
-GPIO.setup(mot1_Dir, GPIO.HIGH)      # HIGH = inject; LOW = fill
-p1_channel =  3
-# Motor 2
-mot2_step = 16
-mot2_Dir = 18
-GPIO.setup(mot2_step, GPIO.OUT)
-GPIO.setup(mot2_Dir, GPIO.OUT)
-GPIO.setup(mot2_Dir, GPIO.HIGH)  
-p2_channel = 0
-## Valve setup---------------------------------------------------
-Alkalinity_valve = 35
-Hardness_valve = 37
-GPIO.setup(Alkalinity_valve, GPIO.OUT, initial=True)
-GPIO.setup(Hardness_valve, GPIO.OUT, initial=True)
-# End of GPIO setup------------------------------------------------
-
-def valve_control(valve, mode):
-	GPIO.setup(Alkalinity_valve, GPIO.OUT, initial=True)
-	GPIO.setup(Hardness_valve, GPIO.OUT, initial=True)
-	if valve == 'Hardness':
-		if mode == 'ON':
-			GPIO.output(Hardness_valve, False)
-		elif mode == 'OFF':
-			GPIO.output(Hardness_valve, True)
-		else:
-			tkMessagebox.Showwarning('ERROR', 'Hardness valve Mode not selected')           
-	elif valve == 'Alkalinity':
-		if mode == 'ON':
-			GPIO.output(Alkalinity_valve, False)
-		elif mode == 'OFF':
-			GPIO.output(Alkalinity_valve, True)
-		else:
-			tkMessagebox.Showwarning('ERROR', 'Alkalinity valve Mode not selected')
-	else:
-		tkMessagebox.Showwarning('ERROR', 'Valve type not selected')
-
+motors = dispexeMotors()
+valve = dispexeValve()
+device = AtlasI2C()
+#device.query("Sleep")
+sensor = W1ThermSensor()
+spectra = Adafruit_AS726x.Adafruit_AS726x()
 
 # AMIS 30543 setup and SPI communication --------------------
 REG = {
@@ -624,7 +588,7 @@ def volume1():
 			if tkMessageBox.askyesno('proceed', 'V1 is %s mL, do you really want to proceed' % (v1)):
 				steps = int((v1 + 0.000785)/0.0000502)
 				p.put(steps)
-				Enable(1, 0)
+				motors.Enable(1, 0)
 				start_process()
 			else:
 				Manbar.state(['!selected'])
@@ -641,294 +605,6 @@ def volume1():
 		Manbar.stop()
 		tkMessageBox.showwarning('warning', "Check Your values/units")
 		
-
-def pump2(volume, direction):
-	steps = int((volume + 0.000785) / 0.0000502)
-	proc_queue2.put(steps)
-	if spi_2.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
-		spi_2.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
-		
-	if spi_2.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
-		spi_2.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
-		
-	if direction == 1:		
-		valve_control('Alkalinity', 'OFF')									  #direction--> 1 = dispense, 0 = refill/retract, 2 = prime/purge, 
-		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
-			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
-	elif direction == 2:
-		valve_control('Alkalinity', 'OFF')	
-		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
-			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
-	else:
-		valve_control('Alkalinity', 'ON')	
-		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
-			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])
-	start_process_p2()
-
-
-def THM_RR(volume, direction):
-	steps = int((volume + 0.000785) / 0.0000502)
-	p.put(steps)
-	if spi_1.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
-		spi_1.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
-		
-	if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
-		spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
-		
-	if direction == 1:	
-		valve_control('Hardness', 'OFF')											  #direction--> 1 = dispense, 0 = refill/retract, 2 = prime/purge, 
-		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
-			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
-			std_stop()
-	elif direction == 2:
-		valve_control('Hardness', 'OFF')	
-		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
-			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
-	else:
-		valve_control('Hardness', 'ON')	
-		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
-			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])
-	start_process()	
-	
-	
-def Enable_p2(direction, prime):
-	GPIO.setwarnings(False)
-	GPIO.setmode(GPIO.BOARD)
-	GPIO.setup(mot2_step, GPIO.OUT)
-	
-	if spi_2.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
-		spi_2.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
-		
-	if spi_2.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
-		spi_2.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
-		
-	if direction == 1:
-		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
-			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
-    
-	else:
-		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
-			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])
-
-
-def Enable(direction, prime):
-	GPIO.setwarnings(False)
-	GPIO.setmode(GPIO.BOARD)
-	GPIO.setup(mot1_step, GPIO.OUT)
-	
-	if spi_1.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
-		spi_1.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
-		
-	if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
-		spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
-		
-	if direction == 1:
-		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
-			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
-    
-	else:
-		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
-			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])			
-
-				
-def prime():																		### v1 is not defined
-	try:
-		if volume_check(v1, check = True):
-			if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#1'):
-				if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
-					THM_RR(0.125, 2)
-				else:
-					THM_RR(0.075, 2)
-				empty_queue()
-		else:
-			tkMessageBox.showwarning('warning', "Not Enough Volume.")
-	except Exception:
-		if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#1'):
-			THM_RR(0.075, 2)
-			empty_queue()
-
-
-def prime_p2():
-	try:
-		if volume_check_p2(v1, check = True):
-			if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#2'):
-				if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
-					pump2(0.25, 2)
-				else:
-					pump2(0.075, 2)
-				empty_queue()
-		else:
-			tkMessageBox.showwarning('warning', "Not Enough Volume.")
-	except Exception:
-		if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#2'):
-			pump2(0.075, 2)
-			empty_queue_p2()
-	
-			
-def Retract():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1'):
-		THM_RR(0.075, 0)
-		valve_control('Hardness', 'OFF')	
-		empty_queue()
-				
-def Retract_p2():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#2'):
-		pump2(0.075, 0)
-		valve_control('Alkalinity', 'OFF')
-		empty_queue_p2()
-
-def Output():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Output syringe#1'):
-		THM_RR(0.075, 1)
-		valve_control('Hardness', 'OFF')	
-		empty_queue()
-
-def Output_p2():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Output syringe#1'):
-		pump2(0.075, 1)
-		valve_control('Hardness', 'OFF')	
-		empty_queue()
-
-def Retract5ml():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1'):
-		THM_RR(5, 0)
-		valve_control('Hardness', 'OFF')	
-		empty_queue()
-
-def Retract5ml_p2():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#2'):
-		pump2(5, 0)
-		valve_control('Hardness', 'OFF')	
-		empty_queue()
-
-		
-def Rf_start():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Refill the syringe#1'):
-		fill_volume = volume_check(0, check = False)
-		if fill_volume > 0:
-			#valve_control('Hardness', 'ON')
-			if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000:
-				THM_RR(fill_volume, 0)
-			else:
-				THM_RR((fill_volume+0.05), 0)
-			popup_window(0, "p1")
-		else:
-			tkMessageBox.showinfo('Full', 'Syringe#1 filled to 5 mL')
-
-
-def Rf_start_p2():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Refill the syringe#2'):
-		fill_volume = volume_check_p2(0, check = False)
-		if fill_volume > 0:
-			#valve_control('Alkalinity', 'ON')
-			if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000:
-				pump2(fill_volume, 0)
-			else:
-				pump2((fill_volume+0.05), 0)
-			popup_window(0, "p2")
-		else:
-			tkMessageBox.showinfo('Full', 'Syringe#2 filled to 5 mL')		
-
-def Rf_start_both():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Refill both Syringes'):
-		fill_volume1 = volume_check(0, check = False)
-		fill_volume2 = volume_check_p2(0, check = False)
-		if fill_volume1 > 0 and fill_volume2 > 0:
-			if (spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000) and (spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000):
-				THM_RR(fill_volume1, 0)
-				pump2(fill_volume2, 0)
-			else:
-				THM_RR((fill_volume1+0.05), 0)
-				pump2((fill_volume2+0.05), 0)
-			popup_window(0, "p1")
-		else:
-			tkMessageBox.showinfo('Full', 'Both Syringes filled to 5 mL')
-
-			
-def purge():
-	if tkMessageBox.askyesno('proceed', 'Do you want to empty the syringe#1'):
-		purge_volume = 4.99 - (volume_check(0, check = False))	
-		if purge_volume != 0:
-			if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
-				THM_RR(purge_volume, 2)
-			else:
-				THM_RR((purge_volume+0.05), 2)
-			popup_window(1, "p1")
-		else:
-			tkMessageBox.showinfo('Empty', 'Syringe#1 is Empty. Please Refill')
-
-			
-def purge_p2():
-	if tkMessageBox.askyesno('proceed', 'Do you want to empty the syringe#2'):
-		purge_volume = 4.99 - (volume_check_p2(0, check = False))	
-		if purge_volume != 0:
-			if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
-				pump2(purge_volume, 2)
-			else:
-				pump2((purge_volume + 0.15), 2)
-			popup_window(1, "p2")
-		else:
-			tkMessageBox.showinfo('Empty', 'Syringe#2 is Empty. Please Refill')
-
-def purge_both():
-	if tkMessageBox.askyesno('proceed', 'Do you want to empty both syringes'):
-		purge_volume1 = 4.99 - (volume_check(0, check = False))	
-		purge_volume2 = 4.99 - (volume_check_p2(0, check = False))
-
-		if purge_volume1 != 0 and purge_volume2 != 0:
-			if (spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000) and (spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000):
-				THM_RR(purge_volume1, 2)
-				pump2(purge_volume2, 2)
-			else:
-				THM_RR((purge_volume1+0.05), 2)
-				pump2((purge_volume2 + 0.15), 2)
-				
-			popup_window(1, "p1")
-		else:
-			tkMessageBox.showinfo('Empty', 'Both Syringes are Empty. Please Refill')
-
-						
-			
-def dispense_loop():
-	step = 11
-	Dir = 13
-	GPIO.setwarnings(False)
-	GPIO.setmode(GPIO.BOARD)
-	GPIO.setup(step, GPIO.OUT)
-	GPIO.setup(Dir, GPIO.OUT)
-	#pid1 = os.getpid()
-	#q.put(pid1)Dispense_step_volume
-	steps = p.get()
-	for x in range (0, steps):
-			GPIO.output(step, GPIO.LOW)
-			time.sleep(0.0005)
-			GPIO.output(step, GPIO.HIGH)
-			time.sleep(0.0005)
-	GPIO.cleanup()	
-	r.put(1)   
-	time.sleep(1)
-	sys.exit(1)
-
-		
-def dispense_loop_p2():
-	step = 16
-	Dir = 18
-	GPIO.setwarnings(False)
-	GPIO.setmode(GPIO.BOARD)
-	GPIO.setup(step, GPIO.OUT)
-	GPIO.setup(Dir, GPIO.OUT)
-	#pid1 = os.getpid()
-	#q2.put(pid1)
-	steps = proc_queue2.get()
-	for x in range (0, steps):
-			GPIO.output(step, GPIO.LOW)
-			time.sleep(0.0005)
-			GPIO.output(step, GPIO.HIGH)
-			time.sleep(0.0005)
-	GPIO.cleanup()	
-	r2.put(1)   
-	time.sleep(1)
-	sys.exit(1)	
 
 		
 def empty_queue():
@@ -1065,29 +741,29 @@ menu.add_cascade(label="",image=img5, font=myfont)
 menu.add_cascade(label="EZ-AutoTitrator",  font=titlefont)
 
 primemenu = Menu(optionmenu)
-primemenu.add_command(label="Pump-1..", command=prime, font=titlefont)
+primemenu.add_command(label="Pump-1..", command=motors.prime, font=titlefont)
 primemenu.add_separator()
-primemenu.add_command(label= "Pump-2..", command=prime_p2, font=titlefont)
+primemenu.add_command(label= "Pump-2..", command=motors.prime_p2, font=titlefont)
 primemenu.add_separator()
 optionmenu.add_cascade(label="Prime", menu=primemenu, font=titlefont)
 optionmenu.add_separator()
 
 retractmenu = Menu(optionmenu)
-retractmenu.add_command(label="Pump-1..", command=Retract,font=titlefont) 
+retractmenu.add_command(label="Pump-1..", command=motors.Retract,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-2..", command=Retract_p2,font=titlefont) 
+retractmenu.add_command(label="Pump-2..", command=motors.Retract_p2,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-1out..", command=Output,font=titlefont) 
+retractmenu.add_command(label="Pump-1out..", command=motors.Output,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-2out..", command=Output_p2,font=titlefont) 
+retractmenu.add_command(label="Pump-2out..", command=motors.Output_p2,font=titlefont) 
 retractmenu.add_separator()
 optionmenu.add_cascade(label="Calibrate", menu=retractmenu,font=titlefont) 
 optionmenu.add_separator()
 
 retractmenu5ml = Menu(optionmenu)
-retractmenu5ml.add_command(label="Pump-1..", command=Retract5ml,font=titlefont) 
+retractmenu5ml.add_command(label="Pump-1..", command=motors.Retract5ml,font=titlefont) 
 retractmenu5ml.add_separator()
-retractmenu5ml.add_command(label="Pump-2..", command=Retract5ml_p2,font=titlefont) 
+retractmenu5ml.add_command(label="Pump-2..", command=motors.Retract5ml_p2,font=titlefont) 
 retractmenu5ml.add_separator()
 optionmenu.add_cascade(label="Retract5ml", menu=retractmenu5ml,font=titlefont) 
 optionmenu.add_separator()
@@ -1095,21 +771,21 @@ optionmenu.add_separator()
 
 refillmenu = Menu(optionmenu)
 refillmenu.add_separator()
-refillmenu.add_command(label="Syringe-1..", command=Rf_start,font=titlefont)
+refillmenu.add_command(label="Syringe-1..", command=motors.Rf_start,font=titlefont)
 refillmenu.add_separator()
-refillmenu.add_command(label="Syringe_2..", command=Rf_start_p2,font=titlefont)
+refillmenu.add_command(label="Syringe_2..", command=motors.Rf_start_p2,font=titlefont)
 refillmenu.add_separator()
-refillmenu.add_command(label="Both_Syringes..", command=Rf_start_both,font=titlefont)
+refillmenu.add_command(label="Both_Syringes..", command=motors.Rf_start_both,font=titlefont)
 refillmenu.add_separator()
 optionmenu.add_cascade(label="Refill", menu=refillmenu,font=titlefont) 
 optionmenu.add_separator()
 
 emptymenu = Menu(optionmenu)
-emptymenu.add_command(label="Syringe-1..", command=purge,font=titlefont)
+emptymenu.add_command(label="Syringe-1..", command=motors.purge,font=titlefont)
 emptymenu.add_separator()
-emptymenu.add_command(label="Syringe-2..", command=purge_p2,font=titlefont)
+emptymenu.add_command(label="Syringe-2..", command=motors.purge_p2,font=titlefont)
 emptymenu.add_separator()
-emptymenu.add_command(label="Both_Syringes..", command=purge_both,font=titlefont)
+emptymenu.add_command(label="Both_Syringes..", command=motors.purge_both,font=titlefont)
 emptymenu.add_separator()
 optionmenu.add_cascade(label="Empty", menu=emptymenu,font=titlefont) 
 optionmenu.add_separator()
@@ -1175,7 +851,7 @@ def std1_vol():
 		try:
 			if volume_check(float(vol_array[0]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std1'):
-					THM_RR(float(vol_array[0]), 1)
+					motors.THM_RR(float(vol_array[0]), 1)
 					s.configure("bar1.Horizontal.TProgressbar", background='red')
 					bar1.start(10)
 					bar1.state(['!selected', 'selected'])
@@ -1194,7 +870,7 @@ def std2_vol():
 		try:
 			if volume_check(float(vol_array[1]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std2'):
-					THM_RR(float(vol_array[1]), 1)
+					motors.THM_RR(float(vol_array[1]), 1)
 					s.configure("bar2.Horizontal.TProgressbar", background='red')
 					bar2.start(10)
 					bar2.state(['!selected', 'selected'])
@@ -1212,7 +888,7 @@ def std3_vol():
 		try:
 			if volume_check(float(vol_array[2]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std3'):
-					THM_RR(float(vol_array[2]), 1)
+					motors.THM_RR(float(vol_array[2]), 1)
 					s.configure("bar3.Horizontal.TProgressbar", background='red')
 					bar3.start(10)
 					bar3.state(['!selected', 'selected'])
@@ -1230,7 +906,7 @@ def std4_vol():
 		try:
 			if volume_check(float(vol_array[3]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std4'):
-					THM_RR(float(vol_array[3]), 1)
+					motors.THM_RR(float(vol_array[3]), 1)
 					s.configure("bar4.Horizontal.TProgressbar", background='red')
 					bar4.start(10)
 					bar4.state(['!selected', 'selected'])
@@ -1248,7 +924,7 @@ def std5_vol():
 		try:
 			if volume_check(float(vol_array[4]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std5'):
-					THM_RR(float(vol_array[4]), 1)
+					motors.THM_RR(float(vol_array[4]), 1)
 					s.configure("bar5.Horizontal.TProgressbar", background='red')
 					bar5.start(10)
 					bar5.state(['!selected', 'selected'])
@@ -1266,7 +942,7 @@ def chk_vol():
 		try:
 			if volume_check(float(vol_array[5]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do check std'):
-					THM_RR(float(vol_array[5]), 1)
+					motors.THM_RR(float(vol_array[5]), 1)
 					s.configure("chk.Horizontal.TProgressbar", background='red')
 					chk.start(10)
 					chk.state(['!selected', 'selected'])
@@ -1413,12 +1089,6 @@ class AtlasI2C:
 				pass
 		self.set_i2c_address(prev_addr) # restore the address we were using
 		return i2c_devices
-	
-	
-device = AtlasI2C()
-#device.query("Sleep")
-
-spectra = Adafruit_AS726x.Adafruit_AS726x()
 
 def calibrate():
 	#device.query('cal,clear')
@@ -1452,7 +1122,6 @@ def pH_slope_update():
 	except Exception as e:
 		tkMessageBox.showwarning('ERROR', message=str(e)+'\n pH circuit not workiing properly')
 
-sensor = W1ThermSensor()
 def temperature_update():
 	try:
 		temperature_celsius = sensor.get_temperature()
@@ -1532,7 +1201,7 @@ class Titration_loop:
 		bar_update()
 		p.put(steps)
 		if Refill == 'go':
-			#valve_control('Hardness', 'ON')
+			#valve.Valve_Control('Hardness', 'ON')
 			if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
 				spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])	
 		else: 								# Dispense
@@ -1548,7 +1217,7 @@ class Titration_loop:
 		bar_update_p2()
 		proc_queue2.put(steps)
 		if Refill == 'go':
-			#valve_control('Alkalinity', 'ON')
+			#valve.Valve_Control('Alkalinity', 'ON')
 			if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
 				spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])	
 		else: 								# Dispense
@@ -1635,8 +1304,8 @@ class Titration_loop:
 		pH_label.config(text='{:.4} pH'.format(initpH))
 		if titration_type == "Acid-Base":
 			if tkMessageBox.askyesno('start', 'Is beaker with analyte ready?\n' '\n' 'Is syringe filled with titrant?'):
-				valve_control('Alkalinity', 'OFF')
-				Enable(1, 0)
+				valve.Valve_Control('Alkalinity', 'OFF')
+				motors.Enable(1, 0)
 				pH_array.append(initpH)
 				if initpH < 7:
 					if endpoint_pH.get() == '0.00':
@@ -1663,8 +1332,8 @@ class Titration_loop:
 		elif titration_type == "Alkalinity":
 			if tkMessageBox.askyesno('start', 'Is beaker with sample ready?\n''\n' 'Is syringe filled with Acid?'):
 				if initpH >= 4.3:
-					Enable_p2(1, 0)
-					valve_control('Alkalinity', 'OFF')
+					motors.Enable_p2(1, 0)
+					valve.Valve_Control('Alkalinity', 'OFF')
 					pH_array.append(initpH)
 					if float(predose_vol.get()) == 0.0:
 						Titration_loop.predose = False
@@ -1676,8 +1345,8 @@ class Titration_loop:
 					titration_button.config(text = "START")	
 		elif titration_type =="Colorimetry":
 			if tkMessageBox.askyesno('start', 'Is beaker with analyte ready?\n''\n' 'Is syringe filled with Base?'):
-				Enable(1, 0)
-				valve_control('Alkalinity', 'OFF')
+				motors.Enable(1, 0)
+				valve.Valve_Control('Alkalinity', 'OFF')
 				try:
 					spectra.setup()
 					spectra.setDrvCurrent(0b10)	
@@ -1692,8 +1361,8 @@ class Titration_loop:
 				root.after(100, lambda:get_baseline('General'))
 		elif titration_type =="Hardness":
 			if tkMessageBox.askyesno('start', 'Is beaker with analyte ready?\n''\n' 'Is syringe filled with Titrant?'):
-				Enable(1, 0)
-				valve_control('Hardness', 'OFF')
+				motors.Enable(1, 0)
+				valve.Valve_Control('Hardness', 'OFF')
 				Titration_loop.set_val = 0.4
 				#threshold.set("1150")
 				try:
@@ -1714,7 +1383,7 @@ class Titration_loop:
 		
 	def Refill(self):
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#1 dispense line "):
-		valve_control('Hardness', 'ON')
+		valve.Valve_Control('Hardness', 'ON')
 		distance = pot.read_adc_difference(p1_channel, gain=GAIN)
 		calib_volume = 	float(calibrate_calc1(distance))
 		self.Dispense_step_volume((calib_volume + 0.05), Refill = 'go')
@@ -1723,7 +1392,7 @@ class Titration_loop:
 			
 	def Refill_p2(self):
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#2 dispense line"):
-		valve_control('Alkalinity', 'ON')
+		valve.Valve_Control('Alkalinity', 'ON')
 		distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 		calib_volume = 	float(calibrate_calc2(distance))
 		self.Dispense_step_volume_p2((calib_volume + 0.15), Refill = 'go')
@@ -2213,7 +1882,7 @@ class Titration_loop:
 						if Titration_loop.rf == True:
 							root.after_cancel(barupdate_id_p2)
 							Titration_loop.rf = False
-							#valve_control('Alkalinity', 'ON')
+							#valve.Valve_Control('Alkalinity', 'ON')
 							self.Dispense_step_volume_p2(0.2)
 							time.sleep(10)
 							r2.get(False)
@@ -2270,7 +1939,7 @@ class Titration_loop:
 						if Titration_loop.rf == True:
 							root.after_cancel(barupdate_id)
 							Titration_loop.rf = False
-							#valve_control('Hardness', 'ON')
+							#valve.Valve_Control('Hardness', 'ON')
 							self.Dispense_step_volume(0.25)
 							time.sleep(10)
 							r.get(False)

@@ -1,4 +1,4 @@
-  #!/usr/bin/python
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 from matplotlib.figure import Figure
 from matplotlib import style
