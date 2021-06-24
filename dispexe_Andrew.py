@@ -47,7 +47,6 @@ from dispexe_Valve import dispexeValve
 
 motors = dispexeMotors()
 valve = dispexeValve()
-device = AtlasI2C()
 #device.query("Sleep")
 sensor = W1ThermSensor()
 spectra = Adafruit_AS726x.Adafruit_AS726x()
@@ -1134,6 +1133,9 @@ def temperature_update():
 			tkMessageBox.showerror('Error', message=e)
 			return str(25.0)
 		
+
+device = AtlasI2C()
+
 pH_array = []
 volume_array = [0]
 average_volume = []
