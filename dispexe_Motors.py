@@ -1,6 +1,10 @@
   #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+'''
+motor control using arduino
+'''
+
 from spidev import SpiDev
 import Adafruit_ADS1x15
 import Adafruit_AS726x

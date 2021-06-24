@@ -1,5 +1,9 @@
   #!/usr/bin/python
 # -*- coding: utf-8 -*-
+
+'''
+main program/gui launcher
+'''
 from matplotlib.figure import Figure
 from matplotlib import style
 from spidev import SpiDev

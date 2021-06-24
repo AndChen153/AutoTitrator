@@ -1,3 +1,10 @@
+  #!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+'''
+valve control through relays/three way valves
+'''
+
 from spidev import SpiDev
 import Adafruit_ADS1x15
 import Adafruit_AS726x
