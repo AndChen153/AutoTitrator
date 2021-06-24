@@ -1578,7 +1578,7 @@ class Titration_loop:
 			try:
 				analyte_conc = (float(titrant_conc.get())*Interpol_vol*50000)/float(Analyte_vol.get())  
 				conc_update.config(text = '{0:.5} mg CaCO{1}/L'.format(analyte_conc, (u'\u2083').encode('utf-8')))
-				`Alkalinity_`file_exist = os.path.isfile('/home/pi/Dispenser_gui/Alkalinity_Result_log.csv')
+				Alkalinity_file_exist = os.path.isfile('/home/pi/Dispenser_gui/Alkalinity_Result_log.csv')
 				utc_time = dt.datetime.utcnow()
 				tz = pytz.timezone('America/Chicago')
 				local_time = pytz.utc.localize(utc_time, is_dst=None).astimezone(tz)
