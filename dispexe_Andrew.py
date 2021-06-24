@@ -248,7 +248,7 @@ def calibrate_calc2(distance):
 	return ((distance - 8013.36) / 3163.13)
 
 def initial_bar():
-	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
+	distance = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc1(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s.configure("pump1.Vertical.TProgressbar", background='red')
@@ -264,7 +264,7 @@ def initial_bar():
 	return True
 
 def initial_bar2():
-	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
+	distance = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc2(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s2.configure("pump2.Vertical.TProgressbar", background='red')
@@ -278,7 +278,7 @@ def initial_bar2():
 
 def bar_update():
 	global barupdate_id
-	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
+	distance = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc1(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s.configure("pump1.Vertical.TProgressbar", background='red')
@@ -292,7 +292,7 @@ def bar_update():
 
 def bar_update_p2():
 	global barupdate_id_p2
-	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
+	distance = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc2(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s2.configure("pump2.Vertical.TProgressbar", background='red')
@@ -550,7 +550,7 @@ def start_process_p2():
 	
 	
 def volume_check(dispense_volume, check = True):
-	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
+	distance = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
 	calib_volume = calibrate_calc1(distance)
 	tot_volume = calib_volume + dispense_volume
 	Rem_volume = 5.0 - tot_volume
@@ -564,7 +564,7 @@ def volume_check(dispense_volume, check = True):
 
 	
 def volume_check_p2(dispense_volume, check = True):
-	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
+	distance = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
 	calib_volume = calibrate_calc2(distance)
 	tot_volume = calib_volume + dispense_volume
 	Rem_volume = 5.0 - tot_volume
@@ -1390,7 +1390,7 @@ class Titration_loop:
 	def Refill(self):
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#1 dispense line "):
 		valve.Valve_Control('Hardness', 'ON')
-		distance = pot.read_adc_difference(p1_channel, gain=GAIN)
+		distance = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
 		calib_volume = 	float(calibrate_calc1(distance))
 		self.Dispense_step_volume((calib_volume + 0.05), Refill = 'go')
 		Titration_loop.rf=True
@@ -1399,7 +1399,7 @@ class Titration_loop:
 	def Refill_p2(self):
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#2 dispense line"):
 		valve.Valve_Control('Alkalinity', 'ON')
-		distance = pot.read_adc_difference(p2_channel, gain=GAIN)
+		distance = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
 		calib_volume = 	float(calibrate_calc2(distance))
 		self.Dispense_step_volume_p2((calib_volume + 0.15), Refill = 'go')
 		Titration_loop.rf=True
@@ -1578,7 +1578,7 @@ class Titration_loop:
 			try:
 				analyte_conc = (float(titrant_conc.get())*Interpol_vol*50000)/float(Analyte_vol.get())  
 				conc_update.config(text = '{0:.5} mg CaCO{1}/L'.format(analyte_conc, (u'\u2083').encode('utf-8')))
-				Alkalinity_file_exist = os.path.isfile('/home/pi/Dispenser_gui/Alkalinity_Result_log.csv')
+				`Alkalinity_`file_exist = os.path.isfile('/home/pi/Dispenser_gui/Alkalinity_Result_log.csv')
 				utc_time = dt.datetime.utcnow()
 				tz = pytz.timezone('America/Chicago')
 				local_time = pytz.utc.localize(utc_time, is_dst=None).astimezone(tz)
@@ -2161,7 +2161,7 @@ def sys_check():
 		ready = False
 	time.sleep(3)
 	try:
-		pump1 = pot.read_adc_difference(p1_channel, gain=GAIN)
+		pump1 = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
 		calib_volume1 = calibrate_calc1(pump1)
 		if not -0.3 < calib_volume1 < 5.1:
 			tkMessageBox.showwarning('warning', "Pump#1 Position Sensor Fault or Calibration is off")
@@ -2172,7 +2172,7 @@ def sys_check():
 			chk_top.destroy()	
 			ready = False
 	try:
-		pump2 = pot.read_adc_difference(p2_channel, gain=GAIN)
+		pump2 = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
 		calib_volume2 = calibrate_calc2(pump2)
 		if not -0.3 < calib_volume2 < 5.1:
 			tkMessageBox.showwarning('warning', "Pump#2 Position Sensor Fault or Calibration is off")
