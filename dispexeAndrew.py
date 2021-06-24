@@ -274,9 +274,15 @@ def lower_widget():
 	p2bar_label.lower(belowThis=container)
 	progress_frame.lower()
 
+def calibrate_calc1(distance):
+	return ((distance - 8269.81) / 3170)
+
+def calibrate_calc2(distance):
+	return ((distance - 8013.36) / 3163.13)
+
 def initial_bar():
 	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
-	calib_volume = 	5.0 - ((distance - 8269.81) / 3170)
+	calib_volume = 	5.0 - calibrate_calc1(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s.configure("pump1.Vertical.TProgressbar", background='red')
 	elif 1 < calib_volume and calib_volume <= 2:
@@ -292,7 +298,7 @@ def initial_bar():
 
 def initial_bar2():
 	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
-	calib_volume = 	5.0 - ((distance - 8013.36) / 3163.13)
+	calib_volume = 	5.0 - calibrate_calc2(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s2.configure("pump2.Vertical.TProgressbar", background='red')
 	elif 1 < calib_volume and calib_volume <= 2:
@@ -306,7 +312,7 @@ def initial_bar2():
 def bar_update():
 	global barupdate_id
 	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
-	calib_volume = 	5.0 - ((distance - 8269.81) / 3170)
+	calib_volume = 	5.0 - calibrate_calc1(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s.configure("pump1.Vertical.TProgressbar", background='red')
 	elif 1 < calib_volume and calib_volume <= 2:
@@ -320,7 +326,7 @@ def bar_update():
 def bar_update_p2():
 	global barupdate_id_p2
 	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
-	calib_volume = 	5.0 - ((distance - 8013.36) / 3163.13)
+	calib_volume = 	5.0 - calibrate_calc2(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s2.configure("pump2.Vertical.TProgressbar", background='red')
 	elif 1 < calib_volume and calib_volume <= 2:
@@ -578,7 +584,7 @@ def start_process_p2():
 	
 def volume_check(dispense_volume, check = True):
 	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
-	calib_volume = (distance - 8269.81) / 3170
+	calib_volume = calibrate_calc1(distance)
 	tot_volume = calib_volume + dispense_volume
 	Rem_volume = 5.0 - tot_volume
 	if check:
@@ -592,7 +598,7 @@ def volume_check(dispense_volume, check = True):
 	
 def volume_check_p2(dispense_volume, check = True):
 	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
-	calib_volume = (distance - 8013.36) / 3163.13
+	calib_volume = calibrate_calc2(distance)
 	tot_volume = calib_volume + dispense_volume
 	Rem_volume = 5.0 - tot_volume
 	if check:
@@ -771,6 +777,30 @@ def Retract_p2():
 		valve_control('Alkalinity', 'OFF')
 		empty_queue_p2()
 
+def Output():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Output syringe#1'):
+		THM_RR(0.075, 1)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
+
+def Output_p2():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Output syringe#1'):
+		pump2(0.075, 1)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
+
+def Retract5ml():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1'):
+		THM_RR(5, 0)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
+
+def Retract5ml_p2():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#2'):
+		pump2(5, 0)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
+
 		
 def Rf_start():
 	if tkMessageBox.askyesno('proceed', 'Do you want to Refill the syringe#1'):
@@ -797,7 +827,22 @@ def Rf_start_p2():
 				pump2((fill_volume+0.05), 0)
 			popup_window(0, "p2")
 		else:
-			tkMessageBox.showinfo('Full', 'Syringe#2 filled to 5 mL')			
+			tkMessageBox.showinfo('Full', 'Syringe#2 filled to 5 mL')		
+
+def Rf_start_both():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Refill both Syringes'):
+		fill_volume1 = volume_check(0, check = False)
+		fill_volume2 = volume_check_p2(0, check = False)
+		if fill_volume1 > 0 and fill_volume2 > 0:
+			if (spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000) and (spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000):
+				THM_RR(fill_volume1, 0)
+				pump2(fill_volume2, 0)
+			else:
+				THM_RR((fill_volume1+0.05), 0)
+				pump2((fill_volume2+0.05), 0)
+			popup_window(0, "p1")
+		else:
+			tkMessageBox.showinfo('Full', 'Both Syringes filled to 5 mL')
 
 			
 def purge():
@@ -824,6 +869,24 @@ def purge_p2():
 			popup_window(1, "p2")
 		else:
 			tkMessageBox.showinfo('Empty', 'Syringe#2 is Empty. Please Refill')
+
+def purge_both():
+	if tkMessageBox.askyesno('proceed', 'Do you want to empty both syringes'):
+		purge_volume1 = 4.99 - (volume_check(0, check = False))	
+		purge_volume2 = 4.99 - (volume_check_p2(0, check = False))
+
+		if purge_volume1 != 0 and purge_volume2 != 0:
+			if (spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000) and (spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000):
+				THM_RR(purge_volume1, 2)
+				pump2(purge_volume2, 2)
+			else:
+				THM_RR((purge_volume1+0.05), 2)
+				pump2((purge_volume2 + 0.15), 2)
+				
+			popup_window(1, "p1")
+		else:
+			tkMessageBox.showinfo('Empty', 'Both Syringes are Empty. Please Refill')
+
 						
 			
 def dispense_loop():
@@ -981,7 +1044,8 @@ Dispense_button.grid(row=5, column=1, pady=10, columnspan=2)
 def sys_shut():
 	if tkMessageBox.askyesno('SHUTDOWN', 'Do you want to shutdown the system?'):
 		root.destroy()
-		os.system("sudo shutdown now -P")
+		sys.exit()
+		#os.system("sudo shutdown now -P")
 
 
 def sys_reboot():
@@ -999,6 +1063,7 @@ menu.add_cascade(label="Options", menu=optionmenu, font=titlefont)
 menu.add_cascade(label="                         ",  font=titlefont)
 menu.add_cascade(label="",image=img5, font=myfont)
 menu.add_cascade(label="EZ-AutoTitrator",  font=titlefont)
+
 primemenu = Menu(optionmenu)
 primemenu.add_command(label="Pump-1..", command=prime, font=titlefont)
 primemenu.add_separator()
@@ -1006,28 +1071,49 @@ primemenu.add_command(label= "Pump-2..", command=prime_p2, font=titlefont)
 primemenu.add_separator()
 optionmenu.add_cascade(label="Prime", menu=primemenu, font=titlefont)
 optionmenu.add_separator()
+
 retractmenu = Menu(optionmenu)
 retractmenu.add_command(label="Pump-1..", command=Retract,font=titlefont) 
 retractmenu.add_separator()
 retractmenu.add_command(label="Pump-2..", command=Retract_p2,font=titlefont) 
 retractmenu.add_separator()
-optionmenu.add_cascade(label="Retract", menu=retractmenu,font=titlefont) 
+retractmenu.add_command(label="Pump-1out..", command=Output,font=titlefont) 
+retractmenu.add_separator()
+retractmenu.add_command(label="Pump-2out..", command=Output_p2,font=titlefont) 
+retractmenu.add_separator()
+optionmenu.add_cascade(label="Calibrate", menu=retractmenu,font=titlefont) 
 optionmenu.add_separator()
+
+retractmenu5ml = Menu(optionmenu)
+retractmenu5ml.add_command(label="Pump-1..", command=Retract5ml,font=titlefont) 
+retractmenu5ml.add_separator()
+retractmenu5ml.add_command(label="Pump-2..", command=Retract5ml_p2,font=titlefont) 
+retractmenu5ml.add_separator()
+optionmenu.add_cascade(label="Retract5ml", menu=retractmenu5ml,font=titlefont) 
+optionmenu.add_separator()
+
+
 refillmenu = Menu(optionmenu)
 refillmenu.add_separator()
 refillmenu.add_command(label="Syringe-1..", command=Rf_start,font=titlefont)
 refillmenu.add_separator()
 refillmenu.add_command(label="Syringe_2..", command=Rf_start_p2,font=titlefont)
 refillmenu.add_separator()
+refillmenu.add_command(label="Both_Syringes..", command=Rf_start_both,font=titlefont)
+refillmenu.add_separator()
 optionmenu.add_cascade(label="Refill", menu=refillmenu,font=titlefont) 
 optionmenu.add_separator()
+
 emptymenu = Menu(optionmenu)
 emptymenu.add_command(label="Syringe-1..", command=purge,font=titlefont)
 emptymenu.add_separator()
 emptymenu.add_command(label="Syringe-2..", command=purge_p2,font=titlefont)
 emptymenu.add_separator()
+emptymenu.add_command(label="Both_Syringes..", command=purge_both,font=titlefont)
+emptymenu.add_separator()
 optionmenu.add_cascade(label="Empty", menu=emptymenu,font=titlefont) 
 optionmenu.add_separator()
+
 optionmenu.add_command(label="Reboot", command=sys_reboot,font=titlefont)
 optionmenu.add_separator()
 optionmenu.add_command(label="Quit", command=sys_shut,font=titlefont)
@@ -1630,7 +1716,7 @@ class Titration_loop:
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#1 dispense line "):
 		valve_control('Hardness', 'ON')
 		distance = pot.read_adc_difference(p1_channel, gain=GAIN)
-		calib_volume = 	float((distance - 8269.81) / 3170)
+		calib_volume = 	float(calibrate_calc1(distance))
 		self.Dispense_step_volume((calib_volume + 0.05), Refill = 'go')
 		Titration_loop.rf=True
 		self.initiate_hardness()
@@ -1639,7 +1725,7 @@ class Titration_loop:
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#2 dispense line"):
 		valve_control('Alkalinity', 'ON')
 		distance = pot.read_adc_difference(p2_channel, gain=GAIN)
-		calib_volume = 	float((distance - 8013.36) / 3163.13)
+		calib_volume = 	float(calibrate_calc2(distance))
 		self.Dispense_step_volume_p2((calib_volume + 0.15), Refill = 'go')
 		Titration_loop.rf=True
 		self.initiate()					
@@ -1652,7 +1738,8 @@ class Titration_loop:
 				Titration_loop.titration_type = None
 				Titration_loop.acid_base_type = None
 				self.graph_update()
-				if len(pH_array) == len(volume_array):
+				#if len(pH_array) == len(volume_array):
+				if True == True:
 					firs_derivative = diff(pH_array)/diff(volume_array)
 				else:
 					tkMessageBox.showerror('value error', 'Values missing, redo Titration')
@@ -2179,7 +2266,7 @@ class Titration_loop:
 					root.after_cancel(iid)	
 					self.p3.join()
 					self.p3 = None
-					if self.check_stop() == False:	
+					if self.check_stop() == False:
 						if Titration_loop.rf == True:
 							root.after_cancel(barupdate_id)
 							Titration_loop.rf = False
@@ -2400,7 +2487,7 @@ def sys_check():
 	time.sleep(3)
 	try:
 		pump1 = pot.read_adc_difference(p1_channel, gain=GAIN)
-		calib_volume1 = (pump1 - 8269.81) / 3170
+		calib_volume1 = calibrate_calc1(pump1)
 		if not -0.3 < calib_volume1 < 5.1:
 			tkMessageBox.showwarning('warning', "Pump#1 Position Sensor Fault or Calibration is off")
 			chk_top.destroy()	
@@ -2411,7 +2498,7 @@ def sys_check():
 			ready = False
 	try:
 		pump2 = pot.read_adc_difference(p2_channel, gain=GAIN)
-		calib_volume2 = (pump2 - 8013.36) / 3163.13
+		calib_volume2 = calibrate_calc2(pump2)
 		if not -0.3 < calib_volume2 < 5.1:
 			tkMessageBox.showwarning('warning', "Pump#2 Position Sensor Fault or Calibration is off")
 			chk_top.destroy()
