@@ -1,9 +1,5 @@
-  #!/usr/bin/python
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
-
-'''
-main program/gui launcher
-'''
 from matplotlib.figure import Figure
 from matplotlib import style
 from spidev import SpiDev
@@ -40,18 +36,67 @@ from pandastable import Table, TableModel
 matplotlib.use("TkAgg")
 import pickle
 from w1thermsensor import W1ThermSensor
+from dispexe_pHmeter import AtlasI2C
+from dispexe_data_table import Create_table
 #from sklearn.neighbors import KNeighborsClassifier
 
-from dispexe_Motors import dispexeMotors
-from dispexe_Valve import dispexeValve 
 
-motors = dispexeMotors()
-valve = dispexeValve()
-#device.query("Sleep")
-sensor = W1ThermSensor()
-spectra = Adafruit_AS726x.Adafruit_AS726x()
+
+# GPIO setup-----------------------------------------------
+# Motor 1
+mot1_step = 11						# set up motor 1 gpio pin
+mot1_Dir = 13
+GPIO.setwarnings(False)
+GPIO.setmode(GPIO.BOARD)
+GPIO.setup(mot1_step, GPIO.OUT)
+GPIO.setup(mot1_Dir, GPIO.OUT)
+GPIO.setup(mot1_Dir, GPIO.HIGH)		# HIGH = inject; LOW = fill
+p1_channel =  3
+# Motor 2
+mot2_step = 16						# set up motor 2 gpio pin
+mot2_Dir = 18
+GPIO.setup(mot2_step, GPIO.OUT)
+GPIO.setup(mot2_Dir, GPIO.OUT)
+GPIO.setup(mot2_Dir, GPIO.HIGH)  
+p2_channel = 0
+
+
+
+## Valve setup---------------------------------------------------
+Syringe_2 = 35				# sets up gpio pins for relays that control three way valves
+Syringe_1 = 37
+GPIO.setup(Syringe_2, GPIO.OUT, initial=True)
+GPIO.setup(Syringe_1, GPIO.OUT, initial=True)
+# End of GPIO setup------------------------------------------------
+
+
+
+def valve_control(valve, mode):
+	# switching 3 way valve that controls input and output direction
+	# refilling syringe is "ON", dispensing is "OFF"
+	GPIO.setup(Syringe_2, GPIO.OUT, initial=True)
+	GPIO.setup(Syringe_1, GPIO.OUT, initial=True)
+	if valve == 'Hardness':
+		if mode == 'ON':
+			GPIO.output(Syringe_1, False)
+		elif mode == 'OFF':
+			GPIO.output(Syringe_1, True)
+		else:
+			tkMessagebox.Showwarning('ERROR', 'Hardness valve Mode not selected')           
+	elif valve == 'Alkalinity':
+		if mode == 'ON':
+			GPIO.output(Syringe_2, False)
+		elif mode == 'OFF':
+			GPIO.output(Syringe_2, True)
+		else:
+			tkMessagebox.Showwarning('ERROR', 'Alkalinity valve Mode not selected')
+	else:
+		tkMessagebox.Showwarning('ERROR', 'Valve type not selected')
+
+
 
 # AMIS 30543 setup and SPI communication --------------------
+# setup for Arduino communication
 REG = {
             'WR':  0x00,
             'CR0': 0x01,
@@ -80,6 +125,8 @@ spi_2.open(0, 1)
 spi_2.max_speed_hz = 1000000
 # End of AMIS driver setup---------------------------------------
 
+
+
 # numpad setup--------------------------------------------
 num_run = 0
 btn_funcid = 0
@@ -95,19 +142,22 @@ def click(btn):
 	text = "%s" % btn
 	#entry_list1 = [entrym1, entrym2, entryv2]
 	widget = root.focus_get()
+
 	if not text == "Del" and not text == "Close":
 		if widget in entry_list1 or entry_list or variable_list:
 			widget.insert("insert", text)
+
 	if text == 'Del':
 		if widget in entry_list1 or entry_list or variable_list:
 			widget.delete("0", END)
+
 	if text == 'Close':
 		boot.destroy()
 		num_run = 0
 		root.unbind('<Button-1>', btn_funcid)
 
-
 def numpad():
+	# creates numpad for typing on touchscreen
     global num_run, boot
     boot = tk.Tk()
     boot.overrideredirect(True)
@@ -125,6 +175,7 @@ def numpad():
     boot.geometry('%dx%d+%d+%d' % (w, h, x, y))
     lf = tk.LabelFrame(boot)
     lf.pack(padx=15, pady=10)
+
     btn_list = [
         '0',  '1',  '2', '3', '4',  '5',
         '6', '7', '8', '9', '.', 'Del', 'Close']
@@ -132,6 +183,7 @@ def numpad():
     c = 0
     n = 0
     btn = list(range(len(btn_list)))
+
     for label in btn_list:
         cmd = partial(click, label)
         btn[n] = tk.Button(lf, text=label, width=5, height=2, font=myfont, command=cmd)
@@ -142,18 +194,15 @@ def numpad():
             c = 0
             r += 1
 
-		
 def close(event):
     global num_run, btn_funcid
     if num_run == 1:
         boot.destroy()
         num_run = 0
         root.unbind('<Button-1>', btn_funcid)
-
         
 def Topfocus(event):
 	run(event)
-
 
 def run(event):
     global num_run, btn_funcid
@@ -165,10 +214,11 @@ def run(event):
 # end of numpad---------------------------------------------
 
 
+
 # GUI PROGRAMME ----------------------------------------------------
 root = Tk()
 root.configure(bg="RoyalBlue1")
-#root.title('FI-EZ-PIPETTE')
+# root.title('FI-EZ-PIPETTE')
 tool_frame = Frame(root, bd=1, relief="raised")
 tool_frame.pack(side=TOP, fill=X)
 ws = root.winfo_screenwidth()
@@ -185,32 +235,48 @@ img7 = ImageTk.PhotoImage(Image.open('/home/pi/icons/check.jpg'))
 tool_frame = Frame(root, bd=1, relief="raised")
 tool_frame.pack(side=TOP, fill=X)
 myfont = Font(family ='Times New Roman', size=16)
-titlefont = Font(family ='Gentium basic', size=16, weight='bold', slant='italic')
+titlefont = Font(family ='Gentium basic', size=16, 
+				weight='bold', slant='italic')
 container = Frame(root)
 container.pack(side=TOP, fill="both", expand=True)
 
-#Progress bar----------------------------------------------
+
+
+# Progress bar----------------------------------------------
+# use linear potentiometer to sense position of syringes
 pot = Adafruit_ADS1x15.ADS1115()
 GAIN = 1
 s = ttk.Style()
 s2 = ttk.Style()
 s.theme_use("alt")
 s2.theme_use("alt")
-s.configure("pump1.Vertical.TProgressbar",foreground='red', background='green', thickness=30)
-s2.configure("pump2.Vertical.TProgressbar",foreground='red', background='green', thickness=30)
+s.configure("pump1.Vertical.TProgressbar",foreground='red', 
+			background='green', thickness=30)
+s2.configure("pump2.Vertical.TProgressbar",foreground='red', 
+			background='green', thickness=30)
 #progress_frame = Frame(container, bg = 'red')
 #progress_frame.place(x=10)
-progress_mot2 = ttk.Progressbar(root, style="pump2.Vertical.TProgressbar", orient="vertical", length=105, maximum=5, mode="determinate")
+progress_mot2 = ttk.Progressbar(root, style="pump2.Vertical.TProgressbar", 
+								orient="vertical", length=105, maximum=5, 
+								mode="determinate")
 progress_mot2.place(x=10, y=200)
-progress = ttk.Progressbar(root, style="pump1.Vertical.TProgressbar", orient="vertical", length=105, maximum=5, mode="determinate")
+progress = ttk.Progressbar(root, style="pump1.Vertical.TProgressbar", 
+						   orient="vertical", length=105, maximum=5, 
+						   mode="determinate")
 progress.place(x=50, y=200)
-p1bar_label = Label(root, text="P2", bg="RoyalBlue1", foreground="white", font=myfont)
+p1bar_label = Label(root, text="P2", 
+					bg="RoyalBlue1", foreground="white", 
+					font=myfont)
 p1bar_label.place(x=15, y=305)
-p2bar_label = Label(root, text="P1", bg="RoyalBlue1", foreground="white", font=myfont)
+p2bar_label = Label(root, text="P1", 
+					bg="RoyalBlue1", foreground="white", 
+					font=myfont)
 p2bar_label.place(x=55, y=305)
 progress_frame = Frame(root, bg = 'red')
 progress_frame.place(x=85, y=193)
-w = Canvas(progress_frame, bg='royalblue1', bd='0', highlightthickness='0', width='50', height='115')
+w = Canvas(progress_frame, bg='royalblue1', 
+		   bd='0', highlightthickness='0', 
+		   width='50', height='115')
 w.pack()
 line50 = w.create_line(0, 10, 20, 10,fill='red', width='2')
 line45 = w.create_line(0, 20, 10, 20, fill='red', width='2')
@@ -248,7 +314,7 @@ def calibrate_calc2(distance):
 	return ((distance - 8013.36) / 3163.13)
 
 def initial_bar():
-	distance = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
+	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc1(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s.configure("pump1.Vertical.TProgressbar", background='red')
@@ -264,7 +330,7 @@ def initial_bar():
 	return True
 
 def initial_bar2():
-	distance = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
+	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc2(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s2.configure("pump2.Vertical.TProgressbar", background='red')
@@ -278,7 +344,7 @@ def initial_bar2():
 
 def bar_update():
 	global barupdate_id
-	distance = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
+	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc1(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s.configure("pump1.Vertical.TProgressbar", background='red')
@@ -292,7 +358,7 @@ def bar_update():
 
 def bar_update_p2():
 	global barupdate_id_p2
-	distance = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
+	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc2(distance)
 	if 0 < calib_volume and calib_volume <= 1:
 		s2.configure("pump2.Vertical.TProgressbar", background='red')
@@ -304,6 +370,7 @@ def bar_update_p2():
 	root.update_idletasks()
 	barupdate_id_p2 = root.after(1000, bar_update_p2)
 	
+
 
 # Edit, load and save Method ------------------------------------------------
 global vol_array
@@ -319,7 +386,8 @@ def load_method(opt):
 	global entry_list
 	global vol_array
 	if opt == 'editor':
-		file_name = tkFileDialog.askopenfilename(filetypes=ftypes, initialdir='/home/pi/Dispenser_gui/Methods')
+		file_name = tkFileDialog.askopenfilename(filetypes=ftypes, 
+												initialdir='/home/pi/Dispenser_gui/Methods')
 		if file_name != '':
 			try:
 				vol_array = []
@@ -335,7 +403,8 @@ def load_method(opt):
 			except Exception as ex:
 				tkMessageBox.showwarning('Error', ex)	         
 	if opt == 'loader':
-		file_name = tkFileDialog.askopenfilename(filetypes=ftypes, initialdir='/home/pi/Dispenser_gui/Methods')
+		file_name = tkFileDialog.askopenfilename(filetypes=ftypes, 
+												initialdir='/home/pi/Dispenser_gui/Methods')
 		if file_name != '':
 			try:
 				vol_array = []
@@ -365,63 +434,77 @@ def save_method():
 		mtop.destroy()			
 	
 
-# Method Top-Level window-----------------------------------------------------
 
+# Method Top-Level window-----------------------------------------------------
 
 mtop = None
 def edit_window():
 	global mtop
 	global entry_list
+
 	entry_list = []
 	mtop = Toplevel(root)
 	mtop.transient(master=root)
 	mtop.grab_set()
 	mtop.geometry('250x220+150+60')
 	mtop.title('Edit')
+
 	l1 = Label(mtop, text="mL", font=myfont)
 	l2 = Label(mtop, text="mL", font=myfont)
 	l3 = Label(mtop, text="mL", font=myfont)
 	l4 = Label(mtop, text="mL", font=myfont)
 	l5 = Label(mtop, text="mL", font=myfont)
 	l6 = Label(mtop, text="mL", font=myfont)
+
 	label1 = Label(mtop, text="std 1", font=myfont)
 	label2 = Label(mtop, text="std 2", font=myfont)
 	label3 = Label(mtop, text="std 3", font=myfont)
 	label4 = Label(mtop, text="std 4", font=myfont)
 	label5 = Label(mtop, text="std 5", font=myfont)
 	label6 = Label(mtop, text="chk std", font=myfont)
+
 	e1 = Entry(mtop, width =10, relief ="raised", font=myfont)
 	e2 = Entry(mtop, width =10, relief ="raised", font=myfont)
 	e3 = Entry(mtop, width =10, relief ="raised", font=myfont)
 	e4 = Entry(mtop, width =10, relief ="raised", font=myfont)
 	e5 = Entry(mtop, width =10, relief ="raised", font=myfont)
 	e6 = Entry(mtop, width =10, relief ="raised", font=myfont)
+
 	l1.grid(row=0, column=2, sticky='W')
 	l2.grid(row=1, column=2, sticky='W')
 	l3.grid(row=2, column=2, sticky='W')
 	l4.grid(row=3, column=2, sticky='W')
 	l5.grid(row=4, column=2, sticky='W')
 	l6.grid(row=5, column=2, sticky='W')
+
 	label1.grid(row=0, column=0, padx=5)
 	label2.grid(row=1, column=0, padx=5)
 	label3.grid(row=2, column=0, padx=5)
 	label4.grid(row=3, column=0, padx=5)
 	label5.grid(row=4, column=0, padx=5)
 	label6.grid(row=5, column=0, padx=5)
+
 	e1.grid(row=0, column=1)
 	e2.grid(row=1, column=1)
 	e3.grid(row=2, column=1)
 	e4.grid(row=3, column=1)
 	e5.grid(row=4, column=1)
 	e6.grid(row=5, column=1)
+
 	entry_list = [e1,e2,e3,e4,e5,e6]
+
 	for entry in entry_list:
 		entry.bind('<Button-1>', Topfocus)
-	sav_button = Button(mtop, text="Save Method", font=myfont, relief="raised", command=save_method)
-	sav_button.grid(row=6, column=0, columnspan=2, pady=5)
+	sav_button = Button(mtop, text="Save Method", 
+						font=myfont, relief="raised", command=save_method)
+	sav_button.grid(row=6, column=0, 
+					columnspan=2, pady=5)
 	return
 
+
+
 # dispenser start--------------------------------------------------------------
+
 conc_mainframe = Frame(container, bg="RoyalBlue1")
 THM_mainframe = Frame(container, bg="RoyalBlue1")
 titer_mainframe = Frame(container, bg="RoyalBlue1")
@@ -461,24 +544,30 @@ def pagefive():
 	Alkalinity_mainframe.lift()
 	lower_widget()
 
-    
 sy_button = Button(tool_frame, text = "MANUAL", command=pageone, font=myfont)
 sy_button.pack(side=LEFT, padx=2, pady=2)
 
 dis_button = Button(tool_frame, text =" THM-RR ", command=pagetwo, font=myfont)
 dis_button.pack(side=LEFT, padx=2, pady=2)
+
 titer_button = Button(tool_frame, text=" TITRATOR ", command=pagethree, font=myfont)
 titer_button.pack(side=LEFT, padx=2, pady=2)
+
 Hardness_button = Button(tool_frame, text="HARDNESS", command=pagefour, font=myfont)
 Hardness_button.pack(side=LEFT, padx=2, pady=2)
+
 Alkalinity_button = Button(tool_frame, text="ALKALINITY", command=pagefive, font=myfont)
 Alkalinity_button.pack(side=LEFT, padx=2, pady=2)
+
 bigfont = Font(family='Times New Roman', size=16)
+
 root.option_add("*TCombobox*Listbox*Font", bigfont)
 m1var = StringVar()
 m1 = {' ppb(ug/L) ':0.001, ' ppt(ng/L) ':0.000001,'   g/L   ':1000, 'ppm(mg/L)': 1}
 combovalues1 = m1.keys()
-m1units = ttk.Combobox(conc_frame, textvariable=m1var, values=combovalues1, state="readonly", width=10, height=5)
+m1units = ttk.Combobox(conc_frame, textvariable=m1var, 
+					   values=combovalues1, state="readonly", 
+					   width=10, height=5)
 m1units.config(font=myfont)
 m1var.set('-- units --')
 global unit1
@@ -487,15 +576,20 @@ unit1 = IntVar()
 def change_unit1(*args):
     global unit1
     unit1 = m1[m1var.get()]
-	
-	
+
 m1var.trace('w', change_unit1)
 m2var = StringVar()
-m2 = {' ppb(ug/L) ':0.001, ' ppt(ng/L) ':0.000001, '   g/L   ':1000, 'ppm(mg/L)':1}
+m2 = {
+	' ppb(ug/L) ':0.001, ' ppt(ng/L) ':0.000001, 
+	'   g/L   ':1000, 'ppm(mg/L)':1
+	}
 combovalues2 = m2.keys()
-m2units = ttk.Combobox(conc_frame, textvariable=m2var, values=combovalues2, state="readonly", width=10, height=5)
+m2units = ttk.Combobox(conc_frame, textvariable=m2var, 
+					   values=combovalues2, state="readonly", 
+					   width=10, height=5)
 m2units.config(font=myfont)
 m2var.set('-- units --')
+
 global unit2
 unit2 = IntVar()
 
@@ -504,19 +598,21 @@ def change_unit2(*args):
     global unit2
     unit2 = m2[m2var.get()]
 	
-
 m2var.trace('w', change_unit2)
 labelm1 = Label(conc_frame, text="M1", font=myfont, bg='white')
 labelm2 = Label(conc_frame, text="M2", font=myfont, bg='white')
 labelv1 = Label(conc_frame, text="V1 (mL)",font=myfont, bg='white')
 labelv2 = Label(conc_frame, text="V2 (mL)", font=myfont, bg='white')
+
 entrym1 = Entry(conc_frame, width=15, font=myfont, relief ="raised")
 entrym2 = Entry(conc_frame, width=15, font=myfont, relief="raised")
 entryv1 = Entry(conc_frame, width=15, font=myfont, relief="raised")
 entryv2 = Entry(conc_frame, width=15, font=myfont, relief="raised")
+
 entrym1.bind('<Button-1>', Topfocus)
 entrym2.bind('<Button-1>', Topfocus)
 entryv2.bind('<Button-1>', Topfocus)
+
 labelm1.grid (row=0, column=1)
 labelm2.grid(row=0, column=2, padx=5)
 m1units.grid(row=1, sticky='nsew')
@@ -529,7 +625,10 @@ entryv1.grid(row=3, column=1, ipady=6)
 entryv2.grid(row=3, column=2, padx=5, ipady=6)
 path = '/home/pi/Dispenser_gui/python/volume.csv'
 
-entry_list1 = [entrym1, entrym2, entryv2]
+entry_list1 = [
+	entrym1, entrym2, 
+	entryv2
+	]
 
 global p1
 global p2
@@ -550,7 +649,7 @@ def start_process_p2():
 	
 	
 def volume_check(dispense_volume, check = True):
-	distance = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
+	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
 	calib_volume = calibrate_calc1(distance)
 	tot_volume = calib_volume + dispense_volume
 	Rem_volume = 5.0 - tot_volume
@@ -562,9 +661,8 @@ def volume_check(dispense_volume, check = True):
 	else:
 		return calib_volume
 
-	
 def volume_check_p2(dispense_volume, check = True):
-	distance = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
+	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 	calib_volume = calibrate_calc2(distance)
 	tot_volume = calib_volume + dispense_volume
 	Rem_volume = 5.0 - tot_volume
@@ -575,7 +673,6 @@ def volume_check_p2(dispense_volume, check = True):
 			return False
 	else:
 		return calib_volume
-
 		
 def volume1():
 	try:
@@ -588,10 +685,11 @@ def volume1():
 		entryv1.delete(0,"end")
 		entryv1.insert(0, v1)
 		if volume_check(v1, check = True):
-			if tkMessageBox.askyesno('proceed', 'V1 is %s mL, do you really want to proceed' % (v1)):
+			if tkMessageBox.askyesno('proceed',
+									 'V1 is %s mL, do you really want to proceed' % (v1)):
 				steps = int((v1 + 0.000785)/0.0000502)
 				p.put(steps)
-				motors.Enable(1, 0)
+				Enable(1, 0)
 				start_process()
 			else:
 				Manbar.state(['!selected'])
@@ -608,8 +706,295 @@ def volume1():
 		Manbar.stop()
 		tkMessageBox.showwarning('warning', "Check Your values/units")
 		
+def THM_RR(volume, direction):
+	# controls motor for syringe 1
+	steps = int((volume + 0.000785) / 0.0000502)
+	p.put(steps)
+	if spi_1.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
+		spi_1.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
+		
+	if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
+		spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
+
+	# 0 = refill/retract
+	# 1 = dispense
+	# 2 = prime/Empty
+	if direction == 1:	
+		valve_control('Hardness', 'OFF')											  
+		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
+			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
+			std_stop()
+	elif direction == 2:
+		valve_control('Hardness', 'OFF')	
+		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
+			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
+	else:
+		valve_control('Hardness', 'ON')	
+		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
+			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])
+	start_process()	
+
+def syringe_motor_2(volume, direction):
+	# controls motor for syringe 2
+	steps = int((volume + 0.000785) / 0.0000502)
+	proc_queue2.put(steps)
+	if spi_2.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
+		spi_2.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
+		
+	if spi_2.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
+		spi_2.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
+		
+	# 0 = refill/retract
+	# 1 = dispense
+	# 2 = prime/Empty
+	if direction == 1:		
+		valve_control('Alkalinity', 'OFF')
+		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
+			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
+	elif direction == 2:
+		valve_control('Alkalinity', 'OFF')	
+		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
+			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
+	else:
+		valve_control('Alkalinity', 'ON')	
+		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
+			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])
+	start_process_p2()	
+
+def Enable(direction, prime):
+	GPIO.setwarnings(False)
+	GPIO.setmode(GPIO.BOARD)
+	GPIO.setup(mot1_step, GPIO.OUT)
+	
+	if spi_1.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
+		spi_1.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
+		
+	if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
+		spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
+		
+	if direction == 1:
+		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
+			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
+    
+	else:
+		if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
+			spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])			
+
+def Enable_p2(direction, prime):
+	GPIO.setwarnings(False)
+	GPIO.setmode(GPIO.BOARD)
+	GPIO.setup(mot2_step, GPIO.OUT)
+	
+	if spi_2.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
+		spi_2.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
+		
+	if spi_2.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
+		spi_2.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
+		
+	if direction == 1:
+		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b01000000:
+			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b01000000])
+    
+	else:
+		if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
+			spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])
+				
+def prime():																		### v1 is not defined
+	try:
+		if volume_check(v1, check = True):
+			if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#1'):
+				if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
+					THM_RR(0.125, 2)
+				else:
+					THM_RR(0.075, 2)
+				empty_queue()
+		else:
+			tkMessageBox.showwarning('warning', "Not Enough Volume.")
+	except Exception:
+		if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#1'):
+			THM_RR(0.075, 2)
+			empty_queue()
+
+
+def prime_p2():
+	try:
+		if volume_check_p2(v1, check = True):
+			if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#2'):
+				if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
+					syringe_motor_2(0.25, 2)
+				else:
+					syringe_motor_2(0.075, 2)
+				empty_queue()
+		else:
+			tkMessageBox.showwarning('warning', "Not Enough Volume.")
+	except Exception:
+		if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#2'):
+			syringe_motor_2(0.075, 2)
+			empty_queue_p2()
+	
+			
+def Retract():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1'):
+		THM_RR(0.075, 0)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
+				
+def Retract_p2():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#2'):
+		syringe_motor_2(0.075, 0)
+		valve_control('Alkalinity', 'OFF')
+		empty_queue_p2()
+
+def Output():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Output syringe#1'):
+		THM_RR(0.075, 1)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
+
+def Output_p2():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Output syringe#1'):
+		syringe_motor_2(0.075, 1)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
+
+def Retract5ml():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1'):
+		THM_RR(5, 0)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
+
+def Retract5ml_p2():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#2'):
+		syringe_motor_2(5, 0)
+		valve_control('Hardness', 'OFF')	
+		empty_queue()
 
 		
+def Refill():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Refill the syringe#1'):
+		fill_volume = volume_check(0, check = False)
+		if fill_volume > 0:
+			#valve_control('Hardness', 'ON')
+			if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000:
+				THM_RR(fill_volume, 0)
+			else:
+				THM_RR((fill_volume+0.05), 0)
+			popup_window(0, "p1")
+		else:
+			tkMessageBox.showinfo('Full', 'Syringe#1 filled to 5 mL')
+
+def Refill_p2():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Refill the syringe#2'):
+		fill_volume = volume_check_p2(0, check = False)
+		if fill_volume > 0:
+			#valve_control('Alkalinity', 'ON')
+			if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000:
+				syringe_motor_2(fill_volume, 0)
+			else:
+				syringe_motor_2((fill_volume+0.05), 0)
+			popup_window(0, "p2")
+		else:
+			tkMessageBox.showinfo('Full', 'Syringe#2 filled to 5 mL')		
+
+def Refill_both():
+	if tkMessageBox.askyesno('proceed', 'Do you want to Refill both Syringes'):
+		fill_volume1 = volume_check(0, check = False)
+		fill_volume2 = volume_check_p2(0, check = False)
+		if fill_volume1 > 0 and fill_volume2 > 0:
+			if ((spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000) and 
+			   (spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000)):
+				THM_RR(fill_volume1, 0)
+				syringe_motor_2(fill_volume2, 0)
+			else:
+				THM_RR((fill_volume1+0.05), 0)
+				syringe_motor_2((fill_volume2+0.05), 0)
+			popup_window(0, "p1")
+		else:
+			tkMessageBox.showinfo('Full', 'Both Syringes filled to 5 mL')
+
+			
+def Empty():
+	if tkMessageBox.askyesno('proceed', 'Do you want to empty the syringe#1'):
+		Empty_volume = 4.99 - (volume_check(0, check = False))	
+		if Empty_volume != 0:
+			if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
+				THM_RR(Empty_volume, 2)
+			else:
+				THM_RR((Empty_volume+0.05), 2)
+			popup_window(1, "p1")
+		else:
+			tkMessageBox.showinfo('Empty', 'Syringe#1 is Empty. Please Refill')
+	
+def Empty_p2():
+	if tkMessageBox.askyesno('proceed', 'Do you want to empty the syringe#2'):
+		Empty_volume = 4.99 - (volume_check_p2(0, check = False))	
+		if Empty_volume != 0:
+			if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
+				syringe_motor_2(Empty_volume, 2)
+			else:
+				syringe_motor_2((Empty_volume + 0.15), 2)
+			popup_window(1, "p2")
+		else:
+			tkMessageBox.showinfo('Empty', 'Syringe#2 is Empty. Please Refill')
+
+def Empty_both():
+	if tkMessageBox.askyesno('proceed', 'Do you want to empty both syringes'):
+		Empty_volume1 = 4.99 - (volume_check(0, check = False))	
+		Empty_volume2 = 4.99 - (volume_check_p2(0, check = False))
+
+		if Empty_volume1 != 0 and Empty_volume2 != 0:
+			if ((spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000) and 
+				(spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000)):
+				THM_RR(Empty_volume1, 2)
+				syringe_motor_2(Empty_volume2, 2)
+			else:
+				THM_RR((Empty_volume1+0.05), 2)
+				syringe_motor_2((Empty_volume2 + 0.15), 2)
+				
+			popup_window(1, "p1")
+		else:
+			tkMessageBox.showinfo('Empty', 'Both Syringes are Empty. Please Refill')				
+			
+def dispense_loop():
+	step = 11
+	Dir = 13
+	GPIO.setwarnings(False)
+	GPIO.setmode(GPIO.BOARD)
+	GPIO.setup(step, GPIO.OUT)
+	GPIO.setup(Dir, GPIO.OUT)
+	#pid1 = os.getpid()
+	#q.put(pid1)Dispense_step_volume
+	steps = p.get()
+	for x in range (0, steps):
+			GPIO.output(step, GPIO.LOW)
+			time.sleep(0.0005)
+			GPIO.output(step, GPIO.HIGH)
+			time.sleep(0.0005)
+	GPIO.cleanup()	
+	r.put(1)   
+	time.sleep(1)
+	sys.exit(1)
+	
+def dispense_loop_p2():
+	step = 16
+	Dir = 18
+	GPIO.setwarnings(False)
+	GPIO.setmode(GPIO.BOARD)
+	GPIO.setup(step, GPIO.OUT)
+	GPIO.setup(Dir, GPIO.OUT)
+	#pid1 = os.getpid()
+	#q2.put(pid1)
+	steps = proc_queue2.get()
+	for x in range (0, steps):
+			GPIO.output(step, GPIO.LOW)
+			time.sleep(0.0005)
+			GPIO.output(step, GPIO.HIGH)
+			time.sleep(0.0005)
+	GPIO.cleanup()	
+	r2.put(1)   
+	time.sleep(1)
+	sys.exit(1)	
+	
 def empty_queue():
 	global barupdate_id
 	global p1
@@ -626,7 +1011,6 @@ def empty_queue():
 	except Empty:
 		pass
 
-
 def empty_queue_p2():
 	global barupdate_id_p2
 	global p2
@@ -641,8 +1025,7 @@ def empty_queue_p2():
 			tkMessageBox.showinfo("DONE", "Prime/Retract Completed.")
 			initial_bar2()
 	except Empty:
-		pass	
-
+		pass
 				
 def top_close():
 	global barupdate_id
@@ -662,7 +1045,6 @@ def top_close():
 	except Empty:
 		pass
 
-		
 def top_close_p2():
 	global barupdate_id_p2
 	global p2
@@ -680,8 +1062,7 @@ def top_close_p2():
 			top.grab_release()
 	except Empty:
 		pass
-
-				
+			
 def popup_window(dmsg, pump):
 		global top,msg
 		top = Toplevel()
@@ -694,19 +1075,21 @@ def popup_window(dmsg, pump):
 		if pump == "p1":
 			top_close()
 			if dmsg == 1:
-				msg.config(text='Please wait until system Purge syringe#1')
+				msg.config(text='Please wait until system Empty syringe#1')
 			else:
 				msg.config(text="Please wait until system Refill's syringe#1")
 		elif pump == "p2":
 			top_close_p2()
 			if dmsg == 1:
-				msg.config(text='Please wait until system Purge syringe#2')
+				msg.config(text='Please wait until system Empty syringe#2')
 			else:
 				msg.config(text="Please wait until system Refill's syringe#2")	
 		
-		
 def button_call():
-	if Titration_loop.running_titration == False and Manbar.instate(['selected']) == False and bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and bar5.instate(['selected']) == False and chk.instate(['selected']) == False:
+	if (Titration_loop.running_titration == False and Manbar.instate(['selected']) == False and 
+		bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and 
+		bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and 
+		bar5.instate(['selected']) == False and chk.instate(['selected']) == False):
 		s.configure("Manbar.Horizontal.TProgressbar", background='red')
 		Manbar.start(10)
 		Manbar.state(['!selected', 'selected'])
@@ -715,17 +1098,16 @@ def button_call():
 	else:
 		tkMessageBox.showwarning('warning', "Please wait untill current process is done")
 	
-
-Dispense_button = Button(conc_frame, image=img2, width=100, height=60, bg='white', command=button_call)
+Dispense_button = Button(conc_frame, image=img2, 
+						width=100, height=60, 
+						bg='white', command=button_call)
 Dispense_button.grid(row=5, column=1, pady=10, columnspan=2)
 
-	
 def sys_shut():
 	if tkMessageBox.askyesno('SHUTDOWN', 'Do you want to shutdown the system?'):
 		root.destroy()
 		sys.exit()
 		#os.system("sudo shutdown now -P")
-
 
 def sys_reboot():
 	if tkMessageBox.askyesno('REBOOT', 'Do you want to reboot the system?'):
@@ -733,6 +1115,7 @@ def sys_reboot():
 		os.system("sudo shutdown -r now")
 
 	
+
 ## Menu widget--------------------------------------------------
 menu=Menu(root, bg = 'floral white')
 root.config(menu=menu)
@@ -744,51 +1127,50 @@ menu.add_cascade(label="",image=img5, font=myfont)
 menu.add_cascade(label="EZ-AutoTitrator",  font=titlefont)
 
 primemenu = Menu(optionmenu)
-primemenu.add_command(label="Pump-1..", command=motors.prime, font=titlefont)
+primemenu.add_command(label="Pump-1..", command=prime, font=titlefont)
 primemenu.add_separator()
-primemenu.add_command(label= "Pump-2..", command=motors.prime_p2, font=titlefont)
+primemenu.add_command(label= "Pump-2..", command=prime_p2, font=titlefont)
 primemenu.add_separator()
 optionmenu.add_cascade(label="Prime", menu=primemenu, font=titlefont)
 optionmenu.add_separator()
 
 retractmenu = Menu(optionmenu)
-retractmenu.add_command(label="Pump-1..", command=motors.Retract,font=titlefont) 
+retractmenu.add_command(label="Pump-1..", command=Retract,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-2..", command=motors.Retract_p2,font=titlefont) 
+retractmenu.add_command(label="Pump-2..", command=Retract_p2,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-1out..", command=motors.Output,font=titlefont) 
+retractmenu.add_command(label="Pump-1out..", command=Output,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-2out..", command=motors.Output_p2,font=titlefont) 
+retractmenu.add_command(label="Pump-2out..", command=Output_p2,font=titlefont) 
 retractmenu.add_separator()
-optionmenu.add_cascade(label="Calibrate", menu=retractmenu,font=titlefont) 
+optionmenu.add_cascade(label="Incremental", menu=retractmenu,font=titlefont) 
 optionmenu.add_separator()
 
 retractmenu5ml = Menu(optionmenu)
-retractmenu5ml.add_command(label="Pump-1..", command=motors.Retract5ml,font=titlefont) 
+retractmenu5ml.add_command(label="Pump-1..", command=Retract5ml,font=titlefont) 
 retractmenu5ml.add_separator()
-retractmenu5ml.add_command(label="Pump-2..", command=motors.Retract5ml_p2,font=titlefont) 
+retractmenu5ml.add_command(label="Pump-2..", command=Retract5ml_p2,font=titlefont) 
 retractmenu5ml.add_separator()
 optionmenu.add_cascade(label="Retract5ml", menu=retractmenu5ml,font=titlefont) 
 optionmenu.add_separator()
 
-
 refillmenu = Menu(optionmenu)
 refillmenu.add_separator()
-refillmenu.add_command(label="Syringe-1..", command=motors.Rf_start,font=titlefont)
+refillmenu.add_command(label="Syringe-1..", command=Refill,font=titlefont)
 refillmenu.add_separator()
-refillmenu.add_command(label="Syringe_2..", command=motors.Rf_start_p2,font=titlefont)
+refillmenu.add_command(label="Syringe_2..", command=Refill_p2,font=titlefont)
 refillmenu.add_separator()
-refillmenu.add_command(label="Both_Syringes..", command=motors.Rf_start_both,font=titlefont)
+refillmenu.add_command(label="Both Syringes..", command=Refill_both,font=titlefont)
 refillmenu.add_separator()
 optionmenu.add_cascade(label="Refill", menu=refillmenu,font=titlefont) 
 optionmenu.add_separator()
 
 emptymenu = Menu(optionmenu)
-emptymenu.add_command(label="Syringe-1..", command=motors.purge,font=titlefont)
+emptymenu.add_command(label="Syringe-1..", command=Empty,font=titlefont)
 emptymenu.add_separator()
-emptymenu.add_command(label="Syringe-2..", command=motors.purge_p2,font=titlefont)
+emptymenu.add_command(label="Syringe-2..", command=Empty_p2,font=titlefont)
 emptymenu.add_separator()
-emptymenu.add_command(label="Both_Syringes..", command=motors.purge_both,font=titlefont)
+emptymenu.add_command(label="Both Syringes..", command=Empty_both,font=titlefont)
 emptymenu.add_separator()
 optionmenu.add_cascade(label="Empty", menu=emptymenu,font=titlefont) 
 optionmenu.add_separator()
@@ -797,6 +1179,8 @@ optionmenu.add_command(label="Reboot", command=sys_reboot,font=titlefont)
 optionmenu.add_separator()
 optionmenu.add_command(label="Quit", command=sys_shut,font=titlefont)
 # end of menu widget-------------------------------------------
+
+
 
 # THM standard ------------------------------------------------
 def std_stop():
@@ -846,15 +1230,17 @@ def std_stop():
 			initial_bar()					
 	except Empty:
 		pass
-	
 
 def std1_vol():
 	global vol_array
-	if Titration_loop.running_titration == False and bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and bar5.instate(['selected']) == False and chk.instate(['selected']) == False and Manbar.instate(['selected']) == False :
+	if (Titration_loop.running_titration == False and bar1.instate(['selected']) == False and 
+		bar2.instate(['selected']) == False and bar3.instate(['selected']) == False and 
+		bar4.instate(['selected']) == False and bar5.instate(['selected']) == False and 
+		chk.instate(['selected']) == False and Manbar.instate(['selected']) == False):
 		try:
 			if volume_check(float(vol_array[0]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std1'):
-					motors.THM_RR(float(vol_array[0]), 1)
+					THM_RR(float(vol_array[0]), 1)
 					s.configure("bar1.Horizontal.TProgressbar", background='red')
 					bar1.start(10)
 					bar1.state(['!selected', 'selected'])
@@ -866,14 +1252,16 @@ def std1_vol():
 	else:
 		tkMessageBox.showwarning('warning', "Please wait untill current process is done")
 		
-	
 def std2_vol():
 	global vol_array
-	if Titration_loop.running_titration == False and bar2.instate(['selected']) == False and bar1.instate(['selected']) == False and bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and bar5.instate(['selected']) == False and chk.instate(['selected']) == False and Manbar.instate(['selected']) == False:	
+	if (Titration_loop.running_titration == False and bar2.instate(['selected']) == False and 
+		bar1.instate(['selected']) == False and bar3.instate(['selected']) == False and 
+		bar4.instate(['selected']) == False and bar5.instate(['selected']) == False and 
+		chk.instate(['selected']) == False and Manbar.instate(['selected']) == False):	
 		try:
 			if volume_check(float(vol_array[1]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std2'):
-					motors.THM_RR(float(vol_array[1]), 1)
+					THM_RR(float(vol_array[1]), 1)
 					s.configure("bar2.Horizontal.TProgressbar", background='red')
 					bar2.start(10)
 					bar2.state(['!selected', 'selected'])
@@ -884,14 +1272,16 @@ def std2_vol():
 	else:
 		tkMessageBox.showwarning('warning', "Please wait untill current process is done")
 		
-		
 def std3_vol():
 	global vol_array
-	if Titration_loop.running_titration == False and bar3.instate(['selected']) == False and bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and bar4.instate(['selected']) == False and bar5.instate(['selected']) == False and chk.instate(['selected']) == False and Manbar.instate(['selected']) == False:
+	if (Titration_loop.running_titration == False and bar3.instate(['selected']) == False and 
+		bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and 
+		bar4.instate(['selected']) == False and bar5.instate(['selected']) == False and 
+		chk.instate(['selected']) == False and Manbar.instate(['selected']) == False):
 		try:
 			if volume_check(float(vol_array[2]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std3'):
-					motors.THM_RR(float(vol_array[2]), 1)
+					THM_RR(float(vol_array[2]), 1)
 					s.configure("bar3.Horizontal.TProgressbar", background='red')
 					bar3.start(10)
 					bar3.state(['!selected', 'selected'])
@@ -902,14 +1292,16 @@ def std3_vol():
 	else:
 		tkMessageBox.showwarning('warning', "Please wait untill current process is done")
 		
-		
 def std4_vol():
 	global vol_array
-	if Titration_loop.running_titration == False and bar4.instate(['selected']) == False and bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and bar3.instate(['selected']) == False and bar5.instate(['selected']) == False and chk.instate(['selected']) == False and Manbar.instate(['selected']) == False:	
+	if (Titration_loop.running_titration == False and bar4.instate(['selected']) == False and 
+		bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and 
+		bar3.instate(['selected']) == False and bar5.instate(['selected']) == False and 
+		chk.instate(['selected']) == False and Manbar.instate(['selected']) == False):
 		try:
 			if volume_check(float(vol_array[3]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std4'):
-					motors.THM_RR(float(vol_array[3]), 1)
+					THM_RR(float(vol_array[3]), 1)
 					s.configure("bar4.Horizontal.TProgressbar", background='red')
 					bar4.start(10)
 					bar4.state(['!selected', 'selected'])
@@ -920,14 +1312,16 @@ def std4_vol():
 	else:
 		tkMessageBox.showwarning('warning', "Please wait untill current process is done")
 		
-	
 def std5_vol():
 	global vol_array
-	if Titration_loop.running_titration == False and bar5.instate(['selected']) == False and bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and chk.instate(['selected']) == False and Manbar.instate(['selected']) == False:
+	if (Titration_loop.running_titration == False and bar5.instate(['selected']) == False and 
+		bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and 
+		bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and 
+		chk.instate(['selected']) == False and Manbar.instate(['selected']) == False):
 		try:
 			if volume_check(float(vol_array[4]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std5'):
-					motors.THM_RR(float(vol_array[4]), 1)
+					THM_RR(float(vol_array[4]), 1)
 					s.configure("bar5.Horizontal.TProgressbar", background='red')
 					bar5.start(10)
 					bar5.state(['!selected', 'selected'])
@@ -938,14 +1332,16 @@ def std5_vol():
 	else:
 		tkMessageBox.showwarning('warning', "Please wait untill current process is done")
 		
-		
 def chk_vol():
 	global vol_array
-	if Titration_loop.running_titration == False and chk.instate(['selected']) == False and bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and bar5.instate(['selected']) == False and Manbar.instate(['selected']) == False:	
+	if (Titration_loop.running_titration == False and chk.instate(['selected']) == False and 
+	bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and 
+	bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and 
+	bar5.instate(['selected']) == False and Manbar.instate(['selected']) == False):
 		try:
 			if volume_check(float(vol_array[5]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do check std'):
-					motors.THM_RR(float(vol_array[5]), 1)
+					THM_RR(float(vol_array[5]), 1)
 					s.configure("chk.Horizontal.TProgressbar", background='red')
 					chk.start(10)
 					chk.state(['!selected', 'selected'])
@@ -956,7 +1352,6 @@ def chk_vol():
 	else:
 		tkMessageBox.showwarning('warning', "Please wait untill current process is done")
 
-		
 def reset_label():
 	std1_label.config(image='') 
 	std2_label.config(image='') 
@@ -966,27 +1361,58 @@ def reset_label():
 	chk_label.config(image='')
 
 THM_frame.columnconfigure(1, minsize=250)
-std1_button = Button(THM_frame, width=10, text='%s mL(S1)' %vol_array[0], font=myfont, command=std1_vol)
-std2_button = Button(THM_frame, width=10, text='%s mL(S2)' %vol_array[1], font=myfont, command=std2_vol)
-std3_button = Button(THM_frame, width=10, text='%s mL(S3)' %vol_array[2], font=myfont, command=std3_vol)
-std4_button = Button(THM_frame, width=10, text='%s mL(S4)' %vol_array[3], font=myfont, command=std4_vol)
-std5_button = Button(THM_frame, width=10, text='%s mL(S5)' %vol_array[4], font=myfont, command=std5_vol)
-chk_button = Button(THM_frame, width=10,  text='%s mL(chk)' %vol_array[5], font=myfont, command=chk_vol)
-reset_button = Button(THM_frame, width=10,  text='CLEAR', font=myfont, command=reset_label)
-s.configure("bar1.Horizontal.TProgressbar", troughcolor='RoyalBlue1', background='RoyalBlue1', thickness=2)
-s.configure("bar2.Horizontal.TProgressbar", troughcolor='RoyalBlue1', background='RoyalBlue1', thickness=2)
-s.configure("bar3.Horizontal.TProgressbar", troughcolor='RoyalBlue1', background='RoyalBlue1', thickness=2)
-s.configure("bar4.Horizontal.TProgressbar", troughcolor='RoyalBlue1', background='RoyalBlue1', thickness=2)
-s.configure("bar5.Horizontal.TProgressbar", troughcolor='RoyalBlue1', background='RoyalBlue1', thickness=2)
-s.configure("chk.Horizontal.TProgressbar", troughcolor='RoyalBlue1', background='RoyalBlue1', thickness=2)
-s.configure("Manbar.Horizontal.TProgressbar", troughcolor='RoyalBlue1', background='RoyalBlue1', thickness=2)
-bar1 = ttk.Progressbar(THM_frame, style="bar1.Horizontal.TProgressbar", orient="horizontal", length=137, mode="indeterminate")
-bar2 = ttk.Progressbar(THM_frame, style="bar2.Horizontal.TProgressbar", orient="horizontal", length=137, mode="indeterminate")
-bar3 = ttk.Progressbar(THM_frame, style="bar3.Horizontal.TProgressbar", orient="horizontal", length=137, mode="indeterminate")
-bar4 = ttk.Progressbar(THM_frame, style="bar4.Horizontal.TProgressbar", orient="horizontal", length=137, mode="indeterminate")
-bar5 = ttk.Progressbar(THM_frame, style="bar5.Horizontal.TProgressbar", orient="horizontal", length=137, mode="indeterminate")
-chk = ttk.Progressbar(THM_frame, style="chk.Horizontal.TProgressbar", orient="horizontal", length=137, mode="indeterminate")
-Manbar = ttk.Progressbar(conc_frame, style="Manbar.Horizontal.TProgressbar", orient="horizontal", length=107, mode="indeterminate")
+std1_button = Button(THM_frame, width=10, 
+					 text='%s mL(S1)' %vol_array[0], 
+					 font=myfont, command=std1_vol)
+std2_button = Button(THM_frame, width=10, 
+					 text='%s mL(S2)' %vol_array[1], 
+					 font=myfont, command=std2_vol)
+std3_button = Button(THM_frame, width=10, 
+					 text='%s mL(S3)' %vol_array[2], 
+					 font=myfont, command=std3_vol)
+std4_button = Button(THM_frame, width=10, 
+					 text='%s mL(S4)' %vol_array[3], 
+					 font=myfont, command=std4_vol)
+std5_button = Button(THM_frame, width=10, 
+					 text='%s mL(S5)' %vol_array[4], 
+					 font=myfont, command=std5_vol)
+chk_button = Button(THM_frame, width=10, 
+					text='%s mL(chk)' %vol_array[5], 
+					font=myfont, command=chk_vol)
+reset_button = Button(THM_frame, width=10,  
+					  text='CLEAR', font=myfont, 
+					  command=reset_label)
+
+s.configure("bar1.Horizontal.TProgressbar", troughcolor='RoyalBlue1', 
+			background='RoyalBlue1', thickness=2)
+s.configure("bar2.Horizontal.TProgressbar", troughcolor='RoyalBlue1', 
+			background='RoyalBlue1', thickness=2)
+s.configure("bar3.Horizontal.TProgressbar", troughcolor='RoyalBlue1', 
+			background='RoyalBlue1', thickness=2)
+s.configure("bar4.Horizontal.TProgressbar", troughcolor='RoyalBlue1', 
+			background='RoyalBlue1', thickness=2)
+s.configure("bar5.Horizontal.TProgressbar", troughcolor='RoyalBlue1', 
+			background='RoyalBlue1', thickness=2)
+s.configure("chk.Horizontal.TProgressbar", troughcolor='RoyalBlue1', 
+			background='RoyalBlue1', thickness=2)
+s.configure("Manbar.Horizontal.TProgressbar", troughcolor='RoyalBlue1', 
+			background='RoyalBlue1', thickness=2)
+
+bar1 = ttk.Progressbar(THM_frame, style="bar1.Horizontal.TProgressbar", 
+					   orient="horizontal", length=137, mode="indeterminate")
+bar2 = ttk.Progressbar(THM_frame, style="bar2.Horizontal.TProgressbar", 
+					   orient="horizontal", length=137, mode="indeterminate")
+bar3 = ttk.Progressbar(THM_frame, style="bar3.Horizontal.TProgressbar", 
+					   orient="horizontal", length=137, mode="indeterminate")
+bar4 = ttk.Progressbar(THM_frame, style="bar4.Horizontal.TProgressbar", 
+	    			   orient="horizontal", length=137, mode="indeterminate")
+bar5 = ttk.Progressbar(THM_frame, style="bar5.Horizontal.TProgressbar", 
+					   orient="horizontal", length=137, mode="indeterminate")
+chk = ttk.Progressbar(THM_frame, style="chk.Horizontal.TProgressbar", 
+					  orient="horizontal", length=137, mode="indeterminate")
+Manbar = ttk.Progressbar(conc_frame, style="Manbar.Horizontal.TProgressbar", 
+					     orient="horizontal", length=107, mode="indeterminate")
+
 bar1.place(y=47)
 bar2.place(y=105)
 bar3.place(y=161)
@@ -994,21 +1420,26 @@ bar4.place(y=219)
 bar5.place(y=275)
 chk.place(y=332)
 Manbar.place(x=261, y=219)
+
 std1_label = Label(THM_frame, width=25, bg='RoyalBlue1')
 std2_label = Label(THM_frame, width=25, bg='RoyalBlue1')
 std3_label = Label(THM_frame, width=25, bg='RoyalBlue1')
 std4_label = Label(THM_frame, width=25, bg='RoyalBlue1')
 std5_label = Label(THM_frame, width=25, bg='RoyalBlue1')
 chk_label = Label(THM_frame, width=25, bg='RoyalBlue1')
+
 status_label = Label(THM_frame, width=12, bg='White', text=' ', font=myfont)
 status_label.config(text='%s' % (file_name.split('/')[5]))
+
 std1_button.grid(row=0, pady=10)
 std2_button.grid(row=1, pady=10)
 std3_button.grid(row=2, pady=10)
 std4_button.grid(row=3, pady=10)
 std5_button.grid(row=4, pady=10)
+
 chk_button.grid(row=5, pady=10)
 reset_button.grid(row=3, column =2, sticky='W')
+
 std1_label.grid(row=0, column=1, pady=10, sticky='NSW')
 std2_label.grid(row=1, column=1, pady=10, sticky='NSW') 
 std3_label.grid(row=2, column=1, pady=10, sticky='NSW')
@@ -1016,86 +1447,26 @@ std4_label.grid(row=3, column=1, pady=10, sticky='NSW')
 std5_label.grid(row=4, column=1, pady=10, sticky='NSW')
 chk_label.grid(row=5, column=1, pady=10, sticky='NSW')
 status_label.grid(row=1, column=2, sticky='W')
-sel_button = Button(THM_frame, text="Load Method", width=10, command=lambda: load_method('loader'), font=myfont)
+
+sel_button = Button(THM_frame, text="Load Method", 
+					width=10, command=lambda: load_method('loader'), 
+					font=myfont)
 sel_button.grid(row=0, column=2, sticky='W')
-edit_button = Button(THM_frame, text="Edit Method", width=10, command=lambda: load_method('editor'), font=myfont)
+edit_button = Button(THM_frame, text="Edit Method", 
+					 width=10, command=lambda: load_method('editor'), 
+					 font=myfont)
 edit_button.grid(row=2, column=2, sticky='W')
-# dispenser end-----------------------------------------------------------------
+# dispenser end----------------------------------------------------------------------------------------------------------------
 
-# Titrator start----------------------------------------------------------------------------------------------------------------
-# pH Reading---------------------------------------------------------------------------------------------------------------------
-class AtlasI2C:
-	long_timeout = 1.5         	# the timeout needed to query readings and calibrations
-	short_timeout = .5         	# timeout for regular commands
-	default_bus = 1         	# the default bus for I2C on the newer Raspberry Pis, certain older boards use bus 0
-	default_address = 99     	# the default address for the sensor
-	current_addr = default_address
 
-	def __init__(self, address=default_address, bus=default_bus):
-		self.file_read = io.open("/dev/i2c-"+str(bus), "rb", buffering=0)
-		self.file_write = io.open("/dev/i2c-"+str(bus), "wb", buffering=0)
-		self.set_i2c_address(address)
 
-	def set_i2c_address(self, addr):
-		# set the I2C communications to the slave specified by the address
-		# The commands for I2C dev using the ioctl functions are specified in
-		# the i2c-dev.h file from i2c-tools
-		I2C_SLAVE = 0x703
-		fcntl.ioctl(self.file_read, I2C_SLAVE, addr)
-		fcntl.ioctl(self.file_write, I2C_SLAVE, addr)
-		self.current_addr = addr
-
-	def write(self, cmd):
-		# appends the null character and sends the string over I2C
-		cmd += "\00"
-		self.file_write.write(cmd)
-
-	def read(self, num_of_bytes=31):
-		# reads a specified number of bytes from I2C, then parses and displays the result
-		res = self.file_read.read(num_of_bytes)         # read from the board
-		response = filter(lambda x: x != '\x00', res)     # remove the null characters to get the response
-		if ord(response[0]) == 1:             # if the response isn't an error
-			# change MSB to 0 for all received characters except the first and get a list of characters
-			char_list = map(lambda x: chr(ord(x) & ~0x80), list(response[1:]))
-			# NOTE: having to change the MSB to 0 is a glitch in the raspberry pi, and you shouldn't have to do this!
-			return "succeeded " + ''.join(char_list)     # convert the char list to a string and returns it
-		else:
-			return "Error " + str(ord(response[0]))
-
-	def query(self, string):
-		# write a command to the board, wait the correct timeout, and read the response
-		self.write(string)
-
-		# the read and calibration commands require a longer timeout
-		if((string.upper().startswith("R")) or (string.upper().startswith("CAL"))):
-			time.sleep(self.long_timeout)
-		elif string.upper().startswith("SLEEP"):
-			return "sleep mode"
-		else:
-			time.sleep(self.short_timeout)
-
-		return self.read()
-
-	def close(self):
-		self.file_read.close()
-		self.file_write.close()
-
-	def list_i2c_devices(self):
-		prev_addr = self.current_addr # save the current address so we can restore it after
-		i2c_devices = []
-		for i in range (0,128):
-			try:
-				self.set_i2c_address(i)
-				self.read()
-				i2c_devices.append(i)
-			except IOError:
-				pass
-		self.set_i2c_address(prev_addr) # restore the address we were using
-		return i2c_devices
+# Titrator start----------------------------------------------------------------------------------------------------------------	
+device = AtlasI2C()
+#device.query("Sleep")
+spectra = Adafruit_AS726x.Adafruit_AS726x()
 
 def calibrate():
 	#device.query('cal,clear')
-	
 	if tkMessageBox.askyesno('7.00', 'Is pH 7.00 reading stabilized?'):
 		temp = sensor.get_temperature()
 		device.query("T"+str(temp))
@@ -1108,11 +1479,14 @@ def calibrate():
 				temp = sensor.get_temperature()
 				device.query("T"+str(temp))
 				device.query('cal,high, 10.00')
-				tkMessageBox.showinfo('Done', 'Calibration Updated with new three point calibration')
+				tkMessageBox.showinfo('Done', 
+									  'Calibration Updated with new three point calibration')
 			else:
-				tkMessageBox.showinfo('Done', 'Calibration Updated with new two point calibration')
+				tkMessageBox.showinfo('Done', 
+									  'Calibration Updated with new two point calibration')
 		else:
-			tkMessageBox.showinfo('Done', 'Calibration Updated with new single point calibration')
+			tkMessageBox.showinfo('Done', 
+								  'Calibration Updated with new single point calibration')
 	else:
 		tkMessageBox.showinfo('Info', 'Previous Calibration restored')
 	pH_slope_update()	
@@ -1125,6 +1499,7 @@ def pH_slope_update():
 	except Exception as e:
 		tkMessageBox.showwarning('ERROR', message=str(e)+'\n pH circuit not workiing properly')
 
+sensor = W1ThermSensor()
 def temperature_update():
 	try:
 		temperature_celsius = sensor.get_temperature()
@@ -1133,9 +1508,6 @@ def temperature_update():
 			tkMessageBox.showerror('Error', message=e)
 			return str(25.0)
 		
-
-device = AtlasI2C()
-
 pH_array = []
 volume_array = [0]
 average_volume = []
@@ -1182,7 +1554,7 @@ class Titration_loop:
 			rem_volume = volume_check_p2(step_volume, check = True)
 				#tkMessageBox.showwarning('warning', "Not Enough Volume. Refill the syringe#2")
 			return rem_volume
-		except xception as e:
+		except Exception as e:
 			tkMessageBox.showwarning("ERROR", message=e)
 			
 	def Read_pH(self):
@@ -1197,9 +1569,13 @@ class Titration_loop:
 		pH_rate = abs(f_pH - Titration_loop.prev_pH)/5      ## Change in pH over time (5s).
 		Titration_loop.prev_pH = f_pH
 		if pH_rate <= 0.0025:
-			pH_label.config(text='{0:.4} pH/{1}{2}'.format(pH, current_temp,(u"\u2103").encode('utf-8')), bg='SeaGreen1')
+			pH_label.config(
+				text='{0:.4} pH/{1}{2}'.format(pH, current_temp,(u"\u2103").encode('utf-8')), 
+				bg='SeaGreen1')
 		else:
-			pH_label.config(text='{0:.4} pH/{1}{2}'.format(pH, current_temp,(u"\u2103").encode('utf-8')), bg='brown1')
+			pH_label.config(
+				text='{0:.4} pH/{1}{2}'.format(pH, current_temp,(u"\u2103").encode('utf-8')), 
+				bg='brown1')
 		return f_pH
 		
 	def Dispense_step_volume(self, volume, Refill = None):
@@ -1207,7 +1583,7 @@ class Titration_loop:
 		bar_update()
 		p.put(steps)
 		if Refill == 'go':
-			#valve.Valve_Control('Hardness', 'ON')
+			#valve_control('Hardness', 'ON')
 			if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
 				spi_1.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])	
 		else: 								# Dispense
@@ -1223,7 +1599,7 @@ class Titration_loop:
 		bar_update_p2()
 		proc_queue2.put(steps)
 		if Refill == 'go':
-			#valve.Valve_Control('Alkalinity', 'ON')
+			#valve_control('Alkalinity', 'ON')
 			if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] != 0b11000000:
 				spi_2.writebytes([CMD['WRITE'] | REG['CR1'], 0b11000000])	
 		else: 								# Dispense
@@ -1241,53 +1617,82 @@ class Titration_loop:
 		conc_top = Toplevel()
 		conc_top.title('Variable Window')
 		conc_top.geometry('+160+60')
+
 		var_frame = Frame(conc_top)
 		var_frame.grid(row=0, sticky='nsew')
+
 		conc_label = Label(var_frame, text='Titrant Concentration:')
 		conc_label.grid(row=0, column=0,sticky = 'nsew')
 		conc_entry = Entry(var_frame, width = 10,textvariable = titrant_conc)
 		conc_entry.grid(row=0, column=1, sticky ='nsew')
+
 		unitvar.set('-UNITS-')                     # define it as class/instance variable
-		unitbox = ttk.Combobox(var_frame, textvariable = unitvar, values = units, state="readonly", width =10)#,font =myfont)
+		unitbox = ttk.Combobox(var_frame, textvariable = unitvar, 
+							   values = units, state="readonly", 
+							   width =10)#,font =myfont)
 		unitbox.grid(row=0, column=2)
+
 		vol_label = Label(var_frame, text='Sample Volume:')
 		vol_label.grid(row=1, column=0, pady=1, sticky = 'nsew')
 		vol_entry = Entry(var_frame, width =10, textvariable = Analyte_vol)
 		vol_entry.grid(row=1, column=1, pady=1, sticky = 'nsew')
+
 		blank_vol_label = Label(var_frame, text='Blank Volume:')
 		blank_vol_label.grid(row=2, column=0, pady=1, sticky = 'nsew')
-		blank_vol_entry = Entry(var_frame, width =10, textvariable=blank_vol, text=0.0)
+		blank_vol_entry = Entry(var_frame, width =10, 
+							    textvariable=blank_vol, text=0.0)
 		blank_vol_entry.grid(row=2, column=1, pady=1, sticky = 'nsew')
+
 		ml_label = Label(var_frame, text='mL')
 		ml_label.grid(row=1, column=2, pady=1,sticky = 'w')
+
 		blank_ml_label = Label(var_frame, text='mL')
 		blank_ml_label.grid(row=2, column=2, pady=1,sticky = 'w')
+
 		predose_vol_label = Label(var_frame, text='Predose:')
 		predose_vol_label.grid(row=3, column=0, pady=1, sticky = 'nsew')
-		predose_vol_entry = Entry(var_frame, width =10, textvariable=predose_vol, text=0.0)
+		predose_vol_entry = Entry(var_frame, width =10, 
+								  textvariable=predose_vol, text=0.0)
 		predose_vol_entry.grid(row=3, column=1, pady=1, sticky = 'nsew')
 		predose_ml_label = Label(var_frame, text='mL')
 		predose_ml_label.grid(row=3, column=2, pady=1,sticky = 'w')
+
 		endpoint_label= Label(var_frame, text= "Endpoint pH:")
 		endpoint_label.grid(row=4,column=0, sticky='nsew')
-		endpoint_bar = Scale(var_frame, from_=0, to=14, length = 200, resolution = 0.01, variable = endpoint_pH, orient = HORIZONTAL)
+		endpoint_bar = Scale(var_frame, from_=0, to=14, 
+							 length = 200, resolution = 0.01, 
+							 variable = endpoint_pH, orient = HORIZONTAL)
 		endpoint_bar.grid(row=4, column=1,columnspan =3)
+
 		threshold_label = Label(var_frame, text= "Threshold:")
 		threshold_label.grid(row=5, column = 0,sticky = 'nsew')
-		threshold_bar = Scale(var_frame, from_=200, to=2000, length = 200, resolution = 50, variable=threshold, orient = HORIZONTAL)
+		threshold_bar = Scale(var_frame, from_=200, to=2000, 
+							  length = 200, resolution = 50, 
+							  variable=threshold, orient = HORIZONTAL)
 		threshold_bar.grid(row=5, column=1,columnspan =3)
+
 		Sample_type = Label(var_frame, text = 'Sample_ID')
 		Sample_type.grid(row=6,sticky = 'nsew')
-		R1 = Radiobutton(var_frame, text="Raw", variable=Sample_ID_Var, value='Raw')  
+
+		R1 = Radiobutton(var_frame, text="Raw", 
+						 variable=Sample_ID_Var, value='Raw')  
 		R1.grid(row=6, column = 1)         
-		R2 = Radiobutton(var_frame, text="Finished", variable=Sample_ID_Var, value='Finished')
+		R2 = Radiobutton(var_frame, text="Finished", 
+						 variable=Sample_ID_Var, value='Finished')
 		R2.grid(row=6, column = 2) 
 		R1.select()
-		close_button = Button(var_frame, text= "Ok", width = 10, command = self.titration_go)
+
+		close_button = Button(var_frame, text= "Ok", 
+							  width = 10, command = self.titration_go)
 		close_button.grid(row=7, column=1, pady=5)
-		variable_list = [vol_entry, conc_entry, blank_vol_entry, predose_vol_entry]
+		variable_list = [
+			vol_entry, conc_entry, 
+			blank_vol_entry, predose_vol_entry
+			]
+
 		for entry in variable_list:
 			entry.bind('<Button-1>', Topfocus)
+		
 		titre_type = methodvar.get()
 		if titre_type == 'Alkalinity':
 			unitvar.set('M')
@@ -1309,9 +1714,11 @@ class Titration_loop:
 		initpH = float(string.split(reading, " ")[1])
 		pH_label.config(text='{:.4} pH'.format(initpH))
 		if titration_type == "Acid-Base":
-			if tkMessageBox.askyesno('start', 'Is beaker with analyte ready?\n' '\n' 'Is syringe filled with titrant?'):
-				valve.Valve_Control('Alkalinity', 'OFF')
-				motors.Enable(1, 0)
+			if tkMessageBox.askyesno(
+					'start', 
+					'Is beaker with analyte ready?\n' '\n' 'Is syringe filled with titrant?'):
+				valve_control('Alkalinity', 'OFF')
+				Enable(1, 0)
 				pH_array.append(initpH)
 				if initpH < 7:
 					if endpoint_pH.get() == '0.00':
@@ -1336,10 +1743,12 @@ class Titration_loop:
 						Titration_loop.predose = True
 					Titration.base()
 		elif titration_type == "Alkalinity":
-			if tkMessageBox.askyesno('start', 'Is beaker with sample ready?\n''\n' 'Is syringe filled with Acid?'):
+			if tkMessageBox.askyesno(
+					'start', 
+					'Is beaker with sample ready?\n''\n' 'Is syringe filled with Acid?'):
 				if initpH >= 4.3:
-					motors.Enable_p2(1, 0)
-					valve.Valve_Control('Alkalinity', 'OFF')
+					Enable_p2(1, 0)
+					valve_control('Alkalinity', 'OFF')
 					pH_array.append(initpH)
 					if float(predose_vol.get()) == 0.0:
 						Titration_loop.predose = False
@@ -1350,9 +1759,11 @@ class Titration_loop:
 					tkMessageBox.showinfo('DONE', 'pH Already Below 4.3')
 					titration_button.config(text = "START")	
 		elif titration_type =="Colorimetry":
-			if tkMessageBox.askyesno('start', 'Is beaker with analyte ready?\n''\n' 'Is syringe filled with Base?'):
-				motors.Enable(1, 0)
-				valve.Valve_Control('Alkalinity', 'OFF')
+			if tkMessageBox.askyesno(
+					'start', 
+					'Is beaker with analyte ready?\n''\n' 'Is syringe filled with Base?'):
+				Enable(1, 0)
+				valve_control('Alkalinity', 'OFF')
 				try:
 					spectra.setup()
 					spectra.setDrvCurrent(0b10)	
@@ -1366,9 +1777,11 @@ class Titration_loop:
 					Titration_loop.predose = True
 				root.after(100, lambda:get_baseline('General'))
 		elif titration_type =="Hardness":
-			if tkMessageBox.askyesno('start', 'Is beaker with analyte ready?\n''\n' 'Is syringe filled with Titrant?'):
-				motors.Enable(1, 0)
-				valve.Valve_Control('Hardness', 'OFF')
+			if tkMessageBox.askyesno(
+					'start', 
+					'Is beaker with analyte ready?\n''\n' 'Is syringe filled with Titrant?'):
+				Enable(1, 0)
+				valve_control('Hardness', 'OFF')
 				Titration_loop.set_val = 0.4
 				#threshold.set("1150")
 				try:
@@ -1384,13 +1797,15 @@ class Titration_loop:
 					Titration_loop.predose = True	
 				root.after(100, lambda:get_baseline('Hardness'))	
 		elif titration_type =="   -Method-":	
-			tkMessageBox.showwarning('Method', 'select a method from dropdown to proceed')
+			tkMessageBox.showwarning(
+				'Method', 
+				'select a method from dropdown to proceed')
 			titration_button.config(text = "START")				
 		
 	def Refill(self):
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#1 dispense line "):
-		valve.Valve_Control('Hardness', 'ON')
-		distance = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
+		valve_control('Hardness', 'ON')
+		distance = pot.read_adc_difference(p1_channel, gain=GAIN)
 		calib_volume = 	float(calibrate_calc1(distance))
 		self.Dispense_step_volume((calib_volume + 0.05), Refill = 'go')
 		Titration_loop.rf=True
@@ -1398,8 +1813,8 @@ class Titration_loop:
 			
 	def Refill_p2(self):
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#2 dispense line"):
-		valve.Valve_Control('Alkalinity', 'ON')
-		distance = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
+		valve_control('Alkalinity', 'ON')
+		distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 		calib_volume = 	float(calibrate_calc2(distance))
 		self.Dispense_step_volume_p2((calib_volume + 0.15), Refill = 'go')
 		Titration_loop.rf=True
@@ -1434,6 +1849,7 @@ class Titration_loop:
 				except:
 					conc_update.config(text = '0.0')
 				return
+
 			elif Titration_loop.acid_base_type == "setpoint":
 				Titration_loop.titration_type = None
 				Titration_loop.acid_base_type = None
@@ -1454,6 +1870,7 @@ class Titration_loop:
 				self.Refill()
 				tkMessageBox.showinfo('Done', 'Titration Completed')
 				return					
+
 		elif pH < float(endpoint_pH.get()):
 			if abs(pH -pH_array[len(pH_array) - 1]) > 0.1:
 				if Titration_loop.predose == True:
@@ -1575,6 +1992,7 @@ class Titration_loop:
 			del pH_array[:]
 			del average_volume[:]
 			Titration_loop.running_titration = False
+
 			try:
 				analyte_conc = (float(titrant_conc.get())*Interpol_vol*50000)/float(Analyte_vol.get())  
 				conc_update.config(text = '{0:.5} mg CaCO{1}/L'.format(analyte_conc, (u'\u2083').encode('utf-8')))
@@ -1588,7 +2006,10 @@ class Titration_loop:
 					Alkalinity_result = csv.DictWriter(csvfile, fieldnames=fieldnames_alkalinity)
 					if not Alkalinity_file_exist:
 						Alkalinity_result.writeheader()
-					Alkalinity_result.writerow({'Date/Time': formatted_localtime, 'Sample_ID(A)':Sample_ID_Var.get(), 'Alkalinity (mg/L CaCO3)': '{0:.5}'.format(analyte_conc)})
+					Alkalinity_result.writerow(
+						{'Date/Time': formatted_localtime, 'Sample_ID(A)':Sample_ID_Var.get(), 
+						'Alkalinity (mg/L CaCO3)': '{0:.5}'.format(analyte_conc)
+						})
 			except Exception as e:
 				conc_update.config(text = '0.0')
 				tkMessageBox.showwarning("ERROR", message=e)
@@ -1596,6 +2017,7 @@ class Titration_loop:
 			self.Refill_p2()
 			tkMessageBox.showinfo('Done', 'Titration Completed')
 			return
+
 		elif pH > 6:
 			if Titration_loop.predose == True:
 				step_volume = float(predose_vol.get())
@@ -1617,7 +2039,9 @@ class Titration_loop:
 					del average_volume[:]
 					Titration_loop.running_titration = False
 					self.Refill_p2()
-					tkMessageBox.showinfo('No Endpoint', 'Endpoint not detected even after {}mL'.format(Titration_loop.stop_vol))								
+					tkMessageBox.showinfo(
+						'No Endpoint', 
+						'Endpoint not detected even after {}mL'.format(Titration_loop.stop_vol))								
 					return
 			else:
 				self.Refill_p2()		
@@ -1642,7 +2066,9 @@ class Titration_loop:
 					del average_volume[:]
 					Titration_loop.running_titration = False
 					self.Refill_p2()
-					tkMessageBox.showinfo('No Endpoint', 'Endpoint not detected even after {}mL'.format(Titration_loop.stop_vol))
+					tkMessageBox.showinfo(
+						'No Endpoint', 
+						'Endpoint not detected even after {}mL'.format(Titration_loop.stop_vol))
 					return	
 			else:
 				self.Refill_p2()		
@@ -1720,7 +2146,10 @@ class Titration_loop:
 						Hardness_result = csv.DictWriter(csvfile, fieldnames=fieldnames_hardness)
 						if not Hardness_file_exist:
 							Hardness_result.writeheader()
-						Hardness_result.writerow({'Date/Time(H)': formatted_localtime, 'Sample_ID': Sample_ID_Var.get(), 'Hardness (mg/L CaCO3)':'{0:.5}'.format(analyte_conc)})
+						Hardness_result.writerow(
+							{'Date/Time(H)': formatted_localtime, 'Sample_ID': Sample_ID_Var.get(), 
+							'Hardness (mg/L CaCO3)':'{0:.5}'.format(analyte_conc)
+							})
 				except Exception as e:
 					conc_update.config(text = '0.0')
 					tkMessageBox.showwarning("ERROR", message=e)
@@ -1766,7 +2195,9 @@ class Titration_loop:
 					spectra.drvOff()	
 					Titration_loop.running_titration = False
 					self.Refill()
-					tkMessageBox.showerror('No Endpoint', 'Endpoint not detected even after {}mL'.format(Titration_loop.stop_vol))
+					tkMessageBox.showerror(
+						'No Endpoint', 
+						'Endpoint not detected even after {}mL'.format(Titration_loop.stop_vol))
 					return
 			else:
 				self.Refill()		
@@ -1888,7 +2319,7 @@ class Titration_loop:
 						if Titration_loop.rf == True:
 							root.after_cancel(barupdate_id_p2)
 							Titration_loop.rf = False
-							#valve.Valve_Control('Alkalinity', 'ON')
+							#valve_control('Alkalinity', 'ON')
 							self.Dispense_step_volume_p2(0.2)
 							time.sleep(10)
 							r2.get(False)
@@ -1945,7 +2376,7 @@ class Titration_loop:
 						if Titration_loop.rf == True:
 							root.after_cancel(barupdate_id)
 							Titration_loop.rf = False
-							#valve.Valve_Control('Hardness', 'ON')
+							#valve_control('Hardness', 'ON')
 							self.Dispense_step_volume(0.25)
 							time.sleep(10)
 							r.get(False)
@@ -2040,73 +2471,61 @@ def get_pH():
 
 
 Titration = Titration_loop()
-
-class Create_table:
-	def __init__(self):
-		report_subframe_Hardness = Frame(Hardness_mainframe)
-		report_subframe_Hardness.pack(fill=BOTH, expand=1)
-		report_subframe_Alkalinity = Frame(Alkalinity_mainframe)
-		report_subframe_Alkalinity.pack(fill=BOTH, expand=1)
-		Alkalinity = pd.read_csv('/home/pi/Dispenser_gui/Alkalinity_Result_log.csv', delimiter=',')
-		Hardness = pd.read_csv('/home/pi/Dispenser_gui/Hardness_Result_log.csv', delimiter=',')
-		#df = pd.concat([Hardness,Alkalinity], axis=1)
-		self.table_Hardness = pt_H = Table(report_subframe_Hardness, dataframe=Hardness.sort_values(by=['Date/Time(H)'], ascending=False),
-								showtoolbar=False, showstatusbar=False) 
-		self.table_Alkalinity = pt_A = Table(report_subframe_Alkalinity, dataframe=Alkalinity.sort_values(by=['Date/Time'], ascending=False),
-								showtoolbar=False, showstatusbar=False)                                         
-		pt_H.show()
-		pt_A.show()
-		return
-		
-	def update_Hardness(self):
-		Hardness = pd.read_csv('/home/pi/Dispenser_gui/Hardness_Result_log.csv')
-		df = Hardness.sort_values(by='Date/Time(H)', ascending=False)
-		self.table_Hardness.model.df = df
-		self.table_Hardness.redraw()
-		return
-		
-	def update_Alkalinity(self):
-		Alkalinity = pd.read_csv('/home/pi/Dispenser_gui/Alkalinity_Result_log.csv')
-		df = Alkalinity.sort_values(by='Date/Time', ascending=False)
-		self.table_Alkalinity.model.df = df
-		self.table_Alkalinity.redraw()
-		return
 		
 Report = Create_table()	
-
 
 style.use("ggplot")
 controlframe = Frame(titer_mainframe, bg='RoyalBlue1')
 controlframe.place(x=10, y=10)
+
 pbutton = Button(controlframe, width=10, text='Read', font=myfont, command=get_pH)
 pbutton.grid(row=0, column=0, pady=10)
 pH_label = Label(controlframe, background='white', width=14, font=myfont)
 pH_label.grid(row=0, column=1,columnspan=2)
+
 methods = ['Acid-Base', 'Alkalinity', 'Colorimetry', 'Hardness']
 methodvar = StringVar()
-methodbox = ttk.Combobox(controlframe, textvariable=methodvar, values=methods, state="readonly", width=10, font=myfont)
+methodbox = ttk.Combobox(controlframe, textvariable=methodvar, 
+						 values=methods, state="readonly", 
+						 width=10, font=myfont)
 methodvar.set('   -Method-')
 methodbox.grid(row=2, column=0, pady=10)
-calib_button = Button(controlframe, text="Calibrate", width=10, font=myfont, command=calibrate)
+
+calib_button = Button(controlframe, text="Calibrate", 
+					  width=10, font=myfont, command=calibrate)
 calib_button.grid(row=1, column=0)
-slope_label = Label(controlframe, background='white', width=14, font=myfont)
+slope_label = Label(controlframe, background='white', 
+					width=14, font=myfont)
 slope_label.grid(row=1, column=1)
-titration_button = Button(controlframe, text="START", width=10, font=myfont, command=start_titration)
+titration_button = Button(controlframe, text="START", 
+						  width=10, font=myfont, 
+						  command=start_titration)
 titration_button.grid(row=2, column=1, pady=10)
+
 end_vol_label = Label(controlframe, text='End Volume( mL)', width=15)
 end_vol_label.grid(row=3, column=1)
-end_vol_update =Label(controlframe, text='0.0', width=10, bg='white', font=myfont)
+end_vol_update =Label(controlframe, text='0.0', 
+					  width=10, bg='white', 
+					  font=myfont)
 end_vol_update.grid(row=4, column=1)
-spacer_label =Label(controlframe, text = '', width=10, bg='RoyalBlue1', font=myfont)
+
+spacer_label =Label(controlframe, text = '', 
+					width=10, bg='RoyalBlue1', 
+					font=myfont)
 spacer_label.grid(row=5, column=1)
+
 conc_label = Label(controlframe, text='Concentration', width=15)
 conc_label.grid(row=6, column=1)
-conc_update = Label(controlframe, text='0.0', width=10, bg='white', font=myfont, wraplength=80)
+conc_update = Label(controlframe, text='0.0', 
+					width=10, bg='white', font=myfont, 
+					wraplength=80)
 conc_update.grid(row=7, column=1)
+
 gframe= Frame(titer_mainframe)
 gframe.place(x=310)
 plt.ion()	
 f = Figure(figsize=(5.5, 3.5))
+
 ax1 = f.add_subplot(211)
 ax1.set_ylabel('pH')
 ax1.set_xlabel('Volume (mL)')   #, labelpad =-140) # negative padding to move the label to top
@@ -2123,6 +2542,7 @@ ax2.grid(b=True, which='minor', color='black', linestyle=':', alpha =0.2)
 ax2.set_ylim(0, 14)
 ax2.minorticks_on()
 ax2.plot([], [])
+
 canvas = FigureCanvasTkAgg(f, gframe)
 canvas.show()
 canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=True)
@@ -2135,14 +2555,22 @@ def sys_check():
 	chk_top.title("Status Check")
 	chk_top.config(bg="white")
 	chk_top.geometry('260x100+200+260')
-	chk_msg = Message(chk_top, bg="white", text="Initial system check..Please wait", font=myfont, aspect=200)
+	chk_msg = Message(chk_top, bg="white", 
+					  text="Initial system check..Please wait", 
+					  font=myfont, aspect=200)
 	chk_msg.pack(fill=BOTH)
 	time.sleep(0.5)
 	ready = True
 	spi_2.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
+
 	if spi_2.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
-		tkMessageBox.showwarning('warning', "Registry failure. Power might be off or pump #1 stepper driver not communicating with Pi")
-		for x in (std1_button, std2_button, std3_button, std4_button, std5_button, chk_button, Dispense_button):
+		tkMessageBox.showwarning(
+			'warning', 
+			"Registry failure. Power might be off or pump #1 stepper driver not communicating with Pi")
+		for x in (
+				std1_button, std2_button, std3_button, 
+				std4_button, std5_button, chk_button, 
+				Dispense_button):
 			x.config(state="disabled")
 		optionmenu.entryconfigure(0, state="disabled")
 		optionmenu.entryconfigure(2, state="disabled")
@@ -2151,17 +2579,23 @@ def sys_check():
 		chk_top.destroy()
 		ready = False
 	spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
+
 	if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
-		tkMessageBox.showwarning('warning', "Registry failure. Power might be off or pump #2 stepper driver not communicating with Pi")
+		tkMessageBox.showwarning(
+			'warning', 
+			"Registry failure. Power might be off or pump #2 stepper driver not communicating with Pi")
 		#titration_button.configure(state='disabled')    modified
+
 	calib_check1 = initial_bar()
 	calib_check2 = initial_bar2()
+
 	if (not calib_check1 or not calib_check2):
 		chk_top.destroy()
 		ready = False
 	time.sleep(3)
+
 	try:
-		pump1 = pot.read_adc_difference(motors.p1_channel, gain=GAIN)
+		pump1 = pot.read_adc_difference(p1_channel, gain=GAIN)
 		calib_volume1 = calibrate_calc1(pump1)
 		if not -0.3 < calib_volume1 < 5.1:
 			tkMessageBox.showwarning('warning', "Pump#1 Position Sensor Fault or Calibration is off")
@@ -2171,8 +2605,9 @@ def sys_check():
 			tkMessageBox.showwarning('warning', "Pump#1 Position Sensor Fault or Calibration is off")
 			chk_top.destroy()	
 			ready = False
+
 	try:
-		pump2 = pot.read_adc_difference(motors.p2_channel, gain=GAIN)
+		pump2 = pot.read_adc_difference(p2_channel, gain=GAIN)
 		calib_volume2 = calibrate_calc2(pump2)
 		if not -0.3 < calib_volume2 < 5.1:
 			tkMessageBox.showwarning('warning', "Pump#2 Position Sensor Fault or Calibration is off")
@@ -2183,6 +2618,7 @@ def sys_check():
 			chk_top.destroy()
 			ready = False
 	chk_top.destroy()
+	
 	if ready == True:
 		tkMessageBox.showinfo("READY", "CHECK COMPLETED.SYSTEM READY TO USE")
 	else:

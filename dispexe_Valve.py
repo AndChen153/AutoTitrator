@@ -20,6 +20,10 @@ import fcntl      # used to access I2C parameters like addresses
 import math
 import string     # helps parse strings
 import pickle
+from Tkinter import *
+import Tkinter as tk
+import tkMessageBox
+
 
 ## Valve setup---------------------------------------------------
 Alkalinity_valve = 35
@@ -27,23 +31,22 @@ Hardness_valve = 37
 GPIO.setup(Alkalinity_valve, GPIO.OUT, initial=True)
 GPIO.setup(Hardness_valve, GPIO.OUT, initial=True)
 
-class dispexeValve():
-    def Valve_Control(valve, mode):
-        GPIO.setup(Alkalinity_valve, GPIO.OUT, initial=True)
-        GPIO.setup(Hardness_valve, GPIO.OUT, initial=True)
-        if valve == 'Hardness':
-            if mode == 'ON':
-                GPIO.output(Hardness_valve, False)
-            elif mode == 'OFF':
-                GPIO.output(Hardness_valve, True)
-            else:
-                tkMessagebox.Showwarning('ERROR', 'Hardness valve Mode not selected')           
-        elif valve == 'Alkalinity':
-            if mode == 'ON':
-                GPIO.output(Alkalinity_valve, False)
-            elif mode == 'OFF':
-                GPIO.output(Alkalinity_valve, True)
-            else:
-                tkMessagebox.Showwarning('ERROR', 'Alkalinity valve Mode not selected')
-        else:
-            tkMessagebox.Showwarning('ERROR', 'Valve type not selected')
+def Valve_Control(valve, mode):
+	GPIO.setup(Alkalinity_valve, GPIO.OUT, initial=True)
+	GPIO.setup(Hardness_valve, GPIO.OUT, initial=True)
+	if valve == 'Hardness':
+		if mode == 'ON':
+			GPIO.output(Hardness_valve, False)
+		elif mode == 'OFF':
+			GPIO.output(Hardness_valve, True)
+		else:
+			tkMessagebox.Showwarning('ERROR', 'Hardness valve Mode not selected')           
+	elif valve == 'Alkalinity':
+		if mode == 'ON':
+			GPIO.output(Alkalinity_valve, False)
+		elif mode == 'OFF':
+			GPIO.output(Alkalinity_valve, True)
+		else:
+			tkMessagebox.Showwarning('ERROR', 'Alkalinity valve Mode not selected')
+	else:
+		tkMessagebox.Showwarning('ERROR', 'Valve type not selected')
