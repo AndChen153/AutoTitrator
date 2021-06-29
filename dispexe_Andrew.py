@@ -308,12 +308,15 @@ def lower_widget():
 	progress_frame.lower()
 
 def calibrate_calc1(distance):
+	# calibration calcuation to align potentiometer and graph
 	return ((distance - 8269.81) / 3170)
 
 def calibrate_calc2(distance):
+	# calibration calcuation to align potentiometer2 and graph
 	return ((distance - 8013.36) / 3163.13)
 
 def initial_bar():
+	# creates initial settings for progress bar for amount dispensed/refilled in syringe 1
 	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc1(distance)
 	if 0 < calib_volume and calib_volume <= 1:
@@ -330,6 +333,7 @@ def initial_bar():
 	return True
 
 def initial_bar2():
+	# creates initial settings for progress bar for amount dispensed/refilled in syringe 1
 	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc2(distance)
 	if 0 < calib_volume and calib_volume <= 1:
@@ -343,6 +347,7 @@ def initial_bar2():
 	return True
 
 def bar_update():
+	# updates progress bar 1 to reflect how much is filled/dispensed
 	global barupdate_id
 	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc1(distance)
@@ -357,6 +362,7 @@ def bar_update():
 	barupdate_id = root.after(1000, bar_update)
 
 def bar_update_p2():
+	# updates progress bar 1 to reflect how much is filled/dispensed
 	global barupdate_id_p2
 	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc2(distance)
@@ -523,6 +529,7 @@ THM_frame = Frame(THM_mainframe, bg="RoyalBlue1")
 conc_frame.place(x=20, y=20)
 THM_frame.place(x=150, y=20)
 
+# create the 5 different tabs for different processes
 def pageone():
 	conc_mainframe.lift()
 	#progress_frame.lift()
@@ -573,6 +580,7 @@ m1var.set('-- units --')
 global unit1
 unit1 = IntVar()
 
+# unit conversion between ppb, ppt, g/L,and ppm
 def change_unit1(*args):
     global unit1
     unit1 = m1[m1var.get()]
@@ -2618,7 +2626,7 @@ def sys_check():
 			chk_top.destroy()
 			ready = False
 	chk_top.destroy()
-	
+
 	if ready == True:
 		tkMessageBox.showinfo("READY", "CHECK COMPLETED.SYSTEM READY TO USE")
 	else:
