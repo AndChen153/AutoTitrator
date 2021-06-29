@@ -37,7 +37,6 @@ matplotlib.use("TkAgg")
 import pickle
 from w1thermsensor import W1ThermSensor
 from dispexe_pHmeter import AtlasI2C
-from dispexe_data_table import Create_table
 #from sklearn.neighbors import KNeighborsClassifier
 
 
@@ -63,7 +62,7 @@ p2_channel = 0
 
 
 ## Valve setup---------------------------------------------------
-Syringe_2 = 35				# sets up gpio pins for relays that control three way valves
+Syringe_2 = 35						# sets up gpio pins for relays that control three way valves
 Syringe_1 = 37
 GPIO.setup(Syringe_2, GPIO.OUT, initial=True)
 GPIO.setup(Syringe_1, GPIO.OUT, initial=True)
@@ -96,7 +95,7 @@ def valve_control(valve, mode):
 
 
 # AMIS 30543 setup and SPI communication --------------------
-# setup for Arduino communication
+# setup for Arduino communication for PI, pH meter, and temp probe
 REG = {
             'WR':  0x00,
             'CR0': 0x01,
@@ -128,6 +127,7 @@ spi_2.max_speed_hz = 1000000
 
 
 # numpad setup--------------------------------------------
+# creates numpad for typing on touchscreen
 num_run = 0
 btn_funcid = 0
 entry = 0
@@ -157,7 +157,6 @@ def click(btn):
 		root.unbind('<Button-1>', btn_funcid)
 
 def numpad():
-	# creates numpad for typing on touchscreen
     global num_run, boot
     boot = tk.Tk()
     boot.overrideredirect(True)
@@ -216,11 +215,11 @@ def run(event):
 
 
 # GUI PROGRAMME ----------------------------------------------------
-root = Tk()
-root.configure(bg="RoyalBlue1")
+root = Tk()								# initialize Tkinter
+root.configure(bg="RoyalBlue1")			# sets background color
 # root.title('FI-EZ-PIPETTE')
-tool_frame = Frame(root, bd=1, relief="raised")
-tool_frame.pack(side=TOP, fill=X)
+tool_frame = Frame(root, bd=1, relief="raised")		# creates a container for other widgets
+tool_frame.pack(side=TOP, fill=X)		# makes window as small as possible while still encompassing the "frame"
 ws = root.winfo_screenwidth()
 hs = root.winfo_screenheight()
 root.geometry('%dx%d' % (ws, hs))
@@ -274,10 +273,12 @@ p2bar_label = Label(root, text="P1",
 p2bar_label.place(x=55, y=305)
 progress_frame = Frame(root, bg = 'red')
 progress_frame.place(x=85, y=193)
+
 w = Canvas(progress_frame, bg='royalblue1', 
 		   bd='0', highlightthickness='0', 
 		   width='50', height='115')
 w.pack()
+
 line50 = w.create_line(0, 10, 20, 10,fill='red', width='2')
 line45 = w.create_line(0, 20, 10, 20, fill='red', width='2')
 line40 = w.create_line(0, 30, 10, 30, fill='red', width='2')
@@ -294,6 +295,7 @@ text25 = w.create_text(35, 60, text='2.5')
 text0 = w.create_text(30, 110, text='0')
 
 def lift_widget():
+	# brings container forwards
 	progress.lift(aboveThis=container)
 	progress_mot2.lift(aboveThis=container)
 	p1bar_label.lift(aboveThis=container)
@@ -301,6 +303,7 @@ def lift_widget():
 	progress_frame.lift()
 
 def lower_widget():
+	# sends container to the back
 	progress.lower(belowThis=container)
 	progress_mot2.lower(belowThis=container)
 	p1bar_label.lower(belowThis=container)
@@ -333,7 +336,7 @@ def initial_bar():
 	return True
 
 def initial_bar2():
-	# creates initial settings for progress bar for amount dispensed/refilled in syringe 1
+	# creates initial settings for progress bar for amount dispensed/refilled in syringe 2
 	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 	calib_volume = 	5.0 - calibrate_calc2(distance)
 	if 0 < calib_volume and calib_volume <= 1:
@@ -2479,7 +2482,40 @@ def get_pH():
 
 
 Titration = Titration_loop()
+
+class Create_table:
+	def __init__(self):
+		report_subframe_Hardness = Frame(Hardness_mainframe)
+		report_subframe_Hardness.pack(fill=BOTH, expand=1)
+		report_subframe_Alkalinity = Frame(Alkalinity_mainframe)
+		report_subframe_Alkalinity.pack(fill=BOTH, expand=1)
+		Alkalinity = pd.read_csv('/home/pi/Dispenser_gui/Alkalinity_Result_log.csv', delimiter=',')
+		Hardness = pd.read_csv('/home/pi/Dispenser_gui/Hardness_Result_log.csv', delimiter=',')
+		#df = pd.concat([Hardness,Alkalinity], axis=1)
+		self.table_Hardness = pt_H = Table(report_subframe_Hardness, dataframe=Hardness.sort_values(by=['Date/Time(H)'], ascending=False),
+								showtoolbar=False, showstatusbar=False) 
+		self.table_Alkalinity = pt_A = Table(report_subframe_Alkalinity, dataframe=Alkalinity.sort_values(by=['Date/Time'], ascending=False),
+								showtoolbar=False, showstatusbar=False)                                         
+		pt_H.show()
+		pt_A.show()
+		return
 		
+	def update_Hardness(self):
+		Hardness = pd.read_csv('/home/pi/Dispenser_gui/Hardness_Result_log.csv')
+		df = Hardness.sort_values(by='Date/Time(H)', ascending=False)
+		self.table_Hardness.model.df = df
+		self.table_Hardness.redraw()
+		return
+		
+	def update_Alkalinity(self):
+		Alkalinity = pd.read_csv('/home/pi/Dispenser_gui/Alkalinity_Result_log.csv')
+		df = Alkalinity.sort_values(by='Date/Time', ascending=False)
+		self.table_Alkalinity.model.df = df
+		self.table_Alkalinity.redraw()
+		return
+		
+Report = Create_table()	
+
 Report = Create_table()	
 
 style.use("ggplot")
