@@ -260,29 +260,29 @@ progress_mot2 = ttk.Progressbar(root, style="pump2.Vertical.TProgressbar",
 								orient="vertical", length=105, maximum=5, 
 								mode="determinate")
 # progress_mot2.place(x=10, y=200)
-progress_mot2.place(x=10, y=250)
+progress_mot2.place(x=10, y=220)
 
 progress = ttk.Progressbar(root, style="pump1.Vertical.TProgressbar", 
 						   orient="vertical", length=105, maximum=5, 
 						   mode="determinate")
 # progress.place(x=50, y=200)
-progress.place(x=50, y=250)
+progress.place(x=50, y=220)
 
 p1bar_label = Label(root, text="P2", 
 					bg="RoyalBlue1", foreground="white", 
 					font=myfont)
 # p1bar_label.place(x=15, y=305)
-p1bar_label.place(x=15, y=355)
+p1bar_label.place(x=15, y=325)
 
 p2bar_label = Label(root, text="P1", 
 					bg="RoyalBlue1", foreground="white", 
 					font=myfont)
 # p2bar_label.place(x=55, y=305)
-p2bar_label.place(x=55, y=355)
+p2bar_label.place(x=55, y=325)
 
 progress_frame = Frame(root, bg = 'red')
 # progress_frame.place(x=85, y=193)
-progress_frame.place(x=85, y=243)
+progress_frame.place(x=85, y=213)
 
 
 w = Canvas(progress_frame, bg='royalblue1', 
@@ -881,13 +881,13 @@ def Output_p2():
 		empty_queue()
 
 def Retract5ml():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1'):
+	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1 by 5 ml?'):
 		syringe_motor_1(5, 0)
 		valve_control('Hardness', 'OFF')	
 		empty_queue()
 
 def Retract5ml_p2():
-	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#2'):
+	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#2 by 5 ml?'):
 		syringe_motor_2(5, 0)
 		valve_control('Hardness', 'OFF')	
 		empty_queue()
@@ -1150,50 +1150,50 @@ menu.add_cascade(label="",image=img5, font=myfont)
 menu.add_cascade(label="EZ-AutoTitrator",  font=titlefont)
 
 primemenu = Menu(optionmenu)
-primemenu.add_command(label="Pump-1..", command=prime, font=titlefont)		# creates submenu for dropdown
+primemenu.add_command(label="Pump-1", command=prime, font=titlefont)		# creates submenu for dropdown
 primemenu.add_separator()
-primemenu.add_command(label= "Pump-2..", command=prime_p2, font=titlefont)
+primemenu.add_command(label= "Pump-2", command=prime_p2, font=titlefont)
 primemenu.add_separator()
 optionmenu.add_cascade(label="Prime", menu=primemenu, font=titlefont)		# creates submenu title
 optionmenu.add_separator()
 
 retractmenu = Menu(optionmenu)
-retractmenu.add_command(label="Pump-1..", command=Retract,font=titlefont) 
+retractmenu.add_command(label="Pump-1 In", command=Retract,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-2..", command=Retract_p2,font=titlefont) 
+retractmenu.add_command(label="Pump-2 In", command=Retract_p2,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-1out..", command=Output,font=titlefont) 
+retractmenu.add_command(label="Pump-1 Out", command=Output,font=titlefont) 
 retractmenu.add_separator()
-retractmenu.add_command(label="Pump-2out..", command=Output_p2,font=titlefont) 
+retractmenu.add_command(label="Pump-2 Out", command=Output_p2,font=titlefont) 
 retractmenu.add_separator()
 optionmenu.add_cascade(label="Incremental", menu=retractmenu,font=titlefont) 
 optionmenu.add_separator()
 
 retractmenu5ml = Menu(optionmenu)
-retractmenu5ml.add_command(label="Pump-1..", command=Retract5ml,font=titlefont) 
+retractmenu5ml.add_command(label="Pump-1", command=Retract5ml,font=titlefont) 
 retractmenu5ml.add_separator()
-retractmenu5ml.add_command(label="Pump-2..", command=Retract5ml_p2,font=titlefont) 
+retractmenu5ml.add_command(label="Pump-2", command=Retract5ml_p2,font=titlefont) 
 retractmenu5ml.add_separator()
-optionmenu.add_cascade(label="Retract5ml", menu=retractmenu5ml,font=titlefont) 
+optionmenu.add_cascade(label="Retract 5ml", menu=retractmenu5ml,font=titlefont) 
 optionmenu.add_separator()
 
 refillmenu = Menu(optionmenu)
 refillmenu.add_separator()
-refillmenu.add_command(label="Syringe-1..", command=Refill,font=titlefont)
+refillmenu.add_command(label="Syringe-1", command=Refill,font=titlefont)
 refillmenu.add_separator()
-refillmenu.add_command(label="Syringe_2..", command=Refill_p2,font=titlefont)
+refillmenu.add_command(label="Syringe_2", command=Refill_p2,font=titlefont)
 refillmenu.add_separator()
-refillmenu.add_command(label="Both Syringes..", command=Refill_both,font=titlefont)
+refillmenu.add_command(label="Both Syringes", command=Refill_both,font=titlefont)
 refillmenu.add_separator()
 optionmenu.add_cascade(label="Refill", menu=refillmenu,font=titlefont) 
 optionmenu.add_separator()
 
 emptymenu = Menu(optionmenu)
-emptymenu.add_command(label="Syringe-1..", command=Empty,font=titlefont)
+emptymenu.add_command(label="Syringe-1", command=Empty,font=titlefont)
 emptymenu.add_separator()
-emptymenu.add_command(label="Syringe-2..", command=Empty_p2,font=titlefont)
+emptymenu.add_command(label="Syringe-2", command=Empty_p2,font=titlefont)
 emptymenu.add_separator()
-emptymenu.add_command(label="Both Syringes..", command=Empty_both,font=titlefont)
+emptymenu.add_command(label="Both Syringes", command=Empty_both,font=titlefont)
 emptymenu.add_separator()
 optionmenu.add_cascade(label="Empty", menu=emptymenu,font=titlefont) 
 optionmenu.add_separator()
