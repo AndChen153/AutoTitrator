@@ -1,3 +1,8 @@
+import io         # used to create file streams
+import fcntl      # used to access I2C parameters like addresses
+import time
+
+
 # pH meter
 class AtlasI2C:
 	long_timeout = 1.5         	# the timeout needed to query readings and calibrations

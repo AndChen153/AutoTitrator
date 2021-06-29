@@ -634,6 +634,7 @@ labelv1.grid (row=2, column=1, pady=2)
 labelv2.grid(row=2, column=2, padx=5)
 entryv1.grid(row=3, column=1, ipady=6)
 entryv2.grid(row=3, column=2, padx=5, ipady=6)
+
 path = '/home/pi/Dispenser_gui/python/volume.csv'
 
 entry_list1 = [
@@ -717,7 +718,7 @@ def volume1():
 		Manbar.stop()
 		tkMessageBox.showwarning('warning', "Check Your values/units")
 		
-def THM_RR(volume, direction):
+def syringe_motor_1(volume, direction):
 	# controls motor for syringe 1
 	steps = int((volume + 0.000785) / 0.0000502)
 	p.put(steps)
@@ -814,24 +815,24 @@ def prime():																		### v1 is not defined
 	try:
 		if volume_check(v1, check = True):
 			if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#1'):
-				if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
-					THM_RR(0.125, 2)
+				if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:		# checks if syringe is full??
+					syringe_motor_1(0.125, 2)
 				else:
-					THM_RR(0.075, 2)
+					syringe_motor_1(0.075, 2)
 				empty_queue()
 		else:
 			tkMessageBox.showwarning('warning', "Not Enough Volume.")
 	except Exception:
 		if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#1'):
-			THM_RR(0.075, 2)
+			syringe_motor_1(0.075, 2)
 			empty_queue()
 
 
 def prime_p2():
 	try:
 		if volume_check_p2(v1, check = True):
-			if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#2'):
-				if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
+			if tkMessageBox.askyesno('proceed', 'Do you want to Prime pump#2'):	
+				if spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:		# checks if syringe is full??
 					syringe_motor_2(0.25, 2)
 				else:
 					syringe_motor_2(0.075, 2)
@@ -846,7 +847,7 @@ def prime_p2():
 			
 def Retract():
 	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1'):
-		THM_RR(0.075, 0)
+		syringe_motor_1(0.075, 0)
 		valve_control('Hardness', 'OFF')	
 		empty_queue()
 				
@@ -858,7 +859,7 @@ def Retract_p2():
 
 def Output():
 	if tkMessageBox.askyesno('proceed', 'Do you want to Output syringe#1'):
-		THM_RR(0.075, 1)
+		syringe_motor_1(0.075, 1)
 		valve_control('Hardness', 'OFF')	
 		empty_queue()
 
@@ -870,7 +871,7 @@ def Output_p2():
 
 def Retract5ml():
 	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1'):
-		THM_RR(5, 0)
+		syringe_motor_1(5, 0)
 		valve_control('Hardness', 'OFF')	
 		empty_queue()
 
@@ -887,9 +888,9 @@ def Refill():
 		if fill_volume > 0:
 			#valve_control('Hardness', 'ON')
 			if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000:
-				THM_RR(fill_volume, 0)
+				syringe_motor_1(fill_volume, 0)
 			else:
-				THM_RR((fill_volume+0.05), 0)
+				syringe_motor_1((fill_volume+0.05), 0)
 			popup_window(0, "p1")
 		else:
 			tkMessageBox.showinfo('Full', 'Syringe#1 filled to 5 mL')
@@ -914,10 +915,10 @@ def Refill_both():
 		if fill_volume1 > 0 and fill_volume2 > 0:
 			if ((spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000) and 
 			   (spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b11000000)):
-				THM_RR(fill_volume1, 0)
+				syringe_motor_1(fill_volume1, 0)
 				syringe_motor_2(fill_volume2, 0)
 			else:
-				THM_RR((fill_volume1+0.05), 0)
+				syringe_motor_1((fill_volume1+0.05), 0)
 				syringe_motor_2((fill_volume2+0.05), 0)
 			popup_window(0, "p1")
 		else:
@@ -929,9 +930,9 @@ def Empty():
 		Empty_volume = 4.99 - (volume_check(0, check = False))	
 		if Empty_volume != 0:
 			if spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000:
-				THM_RR(Empty_volume, 2)
+				syringe_motor_1(Empty_volume, 2)
 			else:
-				THM_RR((Empty_volume+0.05), 2)
+				syringe_motor_1((Empty_volume+0.05), 2)
 			popup_window(1, "p1")
 		else:
 			tkMessageBox.showinfo('Empty', 'Syringe#1 is Empty. Please Refill')
@@ -956,10 +957,10 @@ def Empty_both():
 		if Empty_volume1 != 0 and Empty_volume2 != 0:
 			if ((spi_1.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000) and 
 				(spi_2.xfer2([CMD['READ'] | REG['CR1'], 0])[1] == 0b01000000)):
-				THM_RR(Empty_volume1, 2)
+				syringe_motor_1(Empty_volume1, 2)
 				syringe_motor_2(Empty_volume2, 2)
 			else:
-				THM_RR((Empty_volume1+0.05), 2)
+				syringe_motor_1((Empty_volume1+0.05), 2)
 				syringe_motor_2((Empty_volume2 + 0.15), 2)
 				
 			popup_window(1, "p1")
@@ -967,19 +968,17 @@ def Empty_both():
 			tkMessageBox.showinfo('Empty', 'Both Syringes are Empty. Please Refill')				
 			
 def dispense_loop():
-	step = 11
-	Dir = 13
 	GPIO.setwarnings(False)
 	GPIO.setmode(GPIO.BOARD)
-	GPIO.setup(step, GPIO.OUT)
-	GPIO.setup(Dir, GPIO.OUT)
+	GPIO.setup(mot1_step, GPIO.OUT)
+	GPIO.setup(mot1_Dir, GPIO.OUT)
 	#pid1 = os.getpid()
 	#q.put(pid1)Dispense_step_volume
 	steps = p.get()
 	for x in range (0, steps):
-			GPIO.output(step, GPIO.LOW)
+			GPIO.output(mot1_step, GPIO.LOW)
 			time.sleep(0.0005)
-			GPIO.output(step, GPIO.HIGH)
+			GPIO.output(mot1_step, GPIO.HIGH)
 			time.sleep(0.0005)
 	GPIO.cleanup()	
 	r.put(1)   
@@ -987,19 +986,17 @@ def dispense_loop():
 	sys.exit(1)
 	
 def dispense_loop_p2():
-	step = 16
-	Dir = 18
 	GPIO.setwarnings(False)
 	GPIO.setmode(GPIO.BOARD)
-	GPIO.setup(step, GPIO.OUT)
-	GPIO.setup(Dir, GPIO.OUT)
+	GPIO.setup(mot2_step, GPIO.OUT)
+	GPIO.setup(mot2_Dir, GPIO.OUT)
 	#pid1 = os.getpid()
 	#q2.put(pid1)
 	steps = proc_queue2.get()
 	for x in range (0, steps):
-			GPIO.output(step, GPIO.LOW)
+			GPIO.output(mot2_step, GPIO.LOW)
 			time.sleep(0.0005)
-			GPIO.output(step, GPIO.HIGH)
+			GPIO.output(mot2_step, GPIO.HIGH)
 			time.sleep(0.0005)
 	GPIO.cleanup()	
 	r2.put(1)   
@@ -1075,26 +1072,27 @@ def top_close_p2():
 		pass
 			
 def popup_window(dmsg, pump):
-		global top,msg
-		top = Toplevel()
-		top.config(bg='royalblue1', relief='raised')
-		top.geometry('160x160+300+280')
-		top.overrideredirect(True)
-		msg = Message(top, relief='raised', bg='white', font=myfont)
-		msg.pack()
-		top.grab_set()
-		if pump == "p1":
-			top_close()
-			if dmsg == 1:
-				msg.config(text='Please wait until system Empty syringe#1')
-			else:
-				msg.config(text="Please wait until system Refill's syringe#1")
-		elif pump == "p2":
-			top_close_p2()
-			if dmsg == 1:
-				msg.config(text='Please wait until system Empty syringe#2')
-			else:
-				msg.config(text="Please wait until system Refill's syringe#2")	
+	# creates popup window for waiting messages
+	global top,msg
+	top = Toplevel()
+	top.config(bg='royalblue1', relief='raised')
+	top.geometry('160x160+300+280')
+	top.overrideredirect(True)
+	msg = Message(top, relief='raised', bg='white', font=myfont)
+	msg.pack()
+	top.grab_set()
+	if pump == "p1":
+		top_close()
+		if dmsg == 1:
+			msg.config(text='Please wait until system Empty syringe#1')
+		else:
+			msg.config(text="Please wait until system Refill's syringe#1")
+	elif pump == "p2":
+		top_close_p2()
+		if dmsg == 1:
+			msg.config(text='Please wait until system Empty syringe#2')
+		else:
+			msg.config(text="Please wait until system Refill's syringe#2")	
 		
 def button_call():
 	if (Titration_loop.running_titration == False and Manbar.instate(['selected']) == False and 
@@ -1115,12 +1113,14 @@ Dispense_button = Button(conc_frame, image=img2,
 Dispense_button.grid(row=5, column=1, pady=10, columnspan=2)
 
 def sys_shut():
+	# closes out of the program but does not shutdown the pi
 	if tkMessageBox.askyesno('SHUTDOWN', 'Do you want to shutdown the system?'):
 		root.destroy()
 		sys.exit()
 		#os.system("sudo shutdown now -P")
 
 def sys_reboot():
+	# reboots the entire pi
 	if tkMessageBox.askyesno('REBOOT', 'Do you want to reboot the system?'):
 		root.destroy()
 		os.system("sudo shutdown -r now")
@@ -1128,21 +1128,22 @@ def sys_reboot():
 	
 
 ## Menu widget--------------------------------------------------
+# creates buttons for dropdown menu
 menu=Menu(root, bg = 'floral white')
 root.config(menu=menu)
 optionmenu = Menu(menu, tearoff=0)
 optionmenu.config(font = myfont)
-menu.add_cascade(label="Options", menu=optionmenu, font=titlefont)
+menu.add_cascade(label="Options", menu=optionmenu, font=titlefont)		
 menu.add_cascade(label="                         ",  font=titlefont)
 menu.add_cascade(label="",image=img5, font=myfont)
 menu.add_cascade(label="EZ-AutoTitrator",  font=titlefont)
 
 primemenu = Menu(optionmenu)
-primemenu.add_command(label="Pump-1..", command=prime, font=titlefont)
+primemenu.add_command(label="Pump-1..", command=prime, font=titlefont)		# creates submenu for dropdown
 primemenu.add_separator()
 primemenu.add_command(label= "Pump-2..", command=prime_p2, font=titlefont)
 primemenu.add_separator()
-optionmenu.add_cascade(label="Prime", menu=primemenu, font=titlefont)
+optionmenu.add_cascade(label="Prime", menu=primemenu, font=titlefont)		# creates submenu title
 optionmenu.add_separator()
 
 retractmenu = Menu(optionmenu)
@@ -1251,7 +1252,7 @@ def std1_vol():
 		try:
 			if volume_check(float(vol_array[0]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std1'):
-					THM_RR(float(vol_array[0]), 1)
+					syringe_motor_1(float(vol_array[0]), 1)
 					s.configure("bar1.Horizontal.TProgressbar", background='red')
 					bar1.start(10)
 					bar1.state(['!selected', 'selected'])
@@ -1272,7 +1273,7 @@ def std2_vol():
 		try:
 			if volume_check(float(vol_array[1]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std2'):
-					THM_RR(float(vol_array[1]), 1)
+					syringe_motor_1(float(vol_array[1]), 1)
 					s.configure("bar2.Horizontal.TProgressbar", background='red')
 					bar2.start(10)
 					bar2.state(['!selected', 'selected'])
@@ -1292,7 +1293,7 @@ def std3_vol():
 		try:
 			if volume_check(float(vol_array[2]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std3'):
-					THM_RR(float(vol_array[2]), 1)
+					syringe_motor_1(float(vol_array[2]), 1)
 					s.configure("bar3.Horizontal.TProgressbar", background='red')
 					bar3.start(10)
 					bar3.state(['!selected', 'selected'])
@@ -1312,7 +1313,7 @@ def std4_vol():
 		try:
 			if volume_check(float(vol_array[3]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std4'):
-					THM_RR(float(vol_array[3]), 1)
+					syringe_motor_1(float(vol_array[3]), 1)
 					s.configure("bar4.Horizontal.TProgressbar", background='red')
 					bar4.start(10)
 					bar4.state(['!selected', 'selected'])
@@ -1332,7 +1333,7 @@ def std5_vol():
 		try:
 			if volume_check(float(vol_array[4]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do std5'):
-					THM_RR(float(vol_array[4]), 1)
+					syringe_motor_1(float(vol_array[4]), 1)
 					s.configure("bar5.Horizontal.TProgressbar", background='red')
 					bar5.start(10)
 					bar5.state(['!selected', 'selected'])
@@ -1352,7 +1353,7 @@ def chk_vol():
 		try:
 			if volume_check(float(vol_array[5]), check = True):
 				if tkMessageBox.askyesno('proceed', 'Do you want to do check std'):
-					THM_RR(float(vol_array[5]), 1)
+					syringe_motor_1(float(vol_array[5]), 1)
 					s.configure("chk.Horizontal.TProgressbar", background='red')
 					chk.start(10)
 					chk.state(['!selected', 'selected'])
