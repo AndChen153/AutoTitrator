@@ -565,6 +565,7 @@ def pagefive():
 	Alkalinity_mainframe.lift()
 	lower_widget()
 
+# names the 5 tabs
 sy_button = Button(tool_frame, text = "MANUAL", command=pageone, font=myfont)
 sy_button.pack(side=LEFT, padx=2, pady=2)
 
@@ -615,11 +616,11 @@ m2var.set('-- units --')
 global unit2
 unit2 = IntVar()
 
-
 def change_unit2(*args):
     global unit2
     unit2 = m2[m2var.get()]
 	
+
 m2var.trace('w', change_unit2)
 labelm1 = Label(conc_frame, text="M1", font=myfont, bg='white')
 labelm2 = Label(conc_frame, text="M2", font=myfont, bg='white')
@@ -672,6 +673,7 @@ def start_process_p2():
 	
 	
 def volume_check(dispense_volume, check = True):
+	# checks how much volume there is in syringe 1
 	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
 	calib_volume = calibrate_calc1(distance)
 	tot_volume = calib_volume + dispense_volume
@@ -685,6 +687,7 @@ def volume_check(dispense_volume, check = True):
 		return calib_volume
 
 def volume_check_p2(dispense_volume, check = True):
+	# checks how much volume there is in syringe 2
 	distance = pot.read_adc_difference(p2_channel, gain=GAIN)
 	calib_volume = calibrate_calc2(distance)
 	tot_volume = calib_volume + dispense_volume
@@ -733,11 +736,11 @@ def syringe_motor_1(volume, direction):
 	# controls motor for syringe 1
 	steps = int((volume + 0.000785) / 0.0000502)
 	p.put(steps)
-	if spi_1.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
-		spi_1.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
+	# if spi_1.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
+	# 	spi_1.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
 		
-	if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
-		spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
+	# if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
+	# 	spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
 
 	# 0 = refill/retract
 	# 1 = dispense
