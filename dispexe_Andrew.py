@@ -255,24 +255,35 @@ s2.configure("pump2.Vertical.TProgressbar",foreground='red',
 			background='green', thickness=30)
 #progress_frame = Frame(container, bg = 'red')
 #progress_frame.place(x=10)
+
 progress_mot2 = ttk.Progressbar(root, style="pump2.Vertical.TProgressbar", 
 								orient="vertical", length=105, maximum=5, 
 								mode="determinate")
-progress_mot2.place(x=10, y=200)
+# progress_mot2.place(x=10, y=200)
+progress_mot2.place(x=10, y=100)
+
 progress = ttk.Progressbar(root, style="pump1.Vertical.TProgressbar", 
 						   orient="vertical", length=105, maximum=5, 
 						   mode="determinate")
-progress.place(x=50, y=200)
+# progress.place(x=50, y=200)
+progress.place(x=50, y=100)
+
 p1bar_label = Label(root, text="P2", 
 					bg="RoyalBlue1", foreground="white", 
 					font=myfont)
-p1bar_label.place(x=15, y=305)
+# p1bar_label.place(x=15, y=305)
+p1bar_label.place(x=15, y=205)
+
 p2bar_label = Label(root, text="P1", 
 					bg="RoyalBlue1", foreground="white", 
 					font=myfont)
-p2bar_label.place(x=55, y=305)
+# p2bar_label.place(x=55, y=305)
+p2bar_label.place(x=55, y=205)
+
 progress_frame = Frame(root, bg = 'red')
-progress_frame.place(x=85, y=193)
+# progress_frame.place(x=85, y=193)
+progress_frame.place(x=85, y=93)
+
 
 w = Canvas(progress_frame, bg='royalblue1', 
 		   bd='0', highlightthickness='0', 
