@@ -272,13 +272,13 @@ p1bar_label = Label(root, text="P2",
 					bg="RoyalBlue1", foreground="white", 
 					font=myfont)
 # p1bar_label.place(x=15, y=305)
-p1bar_label.place(x=15, y=255)
+p1bar_label.place(x=15, y=355)
 
 p2bar_label = Label(root, text="P1", 
 					bg="RoyalBlue1", foreground="white", 
 					font=myfont)
 # p2bar_label.place(x=55, y=305)
-p2bar_label.place(x=55, y=255)
+p2bar_label.place(x=55, y=355)
 
 progress_frame = Frame(root, bg = 'red')
 # progress_frame.place(x=85, y=193)
