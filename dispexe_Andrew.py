@@ -671,7 +671,44 @@ def start_process_p2():
 	p2.deamon = True
 	p2.start()
 	
+def dispense_loop():
+	# is called by start_process()
+	GPIO.setwarnings(False)
+	GPIO.setmode(GPIO.BOARD)
+	GPIO.setup(mot1_step, GPIO.OUT)
+	GPIO.setup(mot1_Dir, GPIO.OUT)
+	#pid1 = os.getpid()
+	#q.put(pid1)Dispense_step_volume
+	steps = p.get()
+	for x in range (0, steps):
+			GPIO.output(mot1_step, GPIO.LOW)
+			time.sleep(0.0005)
+			GPIO.output(mot1_step, GPIO.HIGH)
+			time.sleep(0.0005)
+	GPIO.cleanup()	
+	r.put(1)   
+	time.sleep(1)
+	sys.exit(1)
 	
+def dispense_loop_p2():
+	# is called by start_process_p2()
+	GPIO.setwarnings(False)
+	GPIO.setmode(GPIO.BOARD)
+	GPIO.setup(mot2_step, GPIO.OUT)
+	GPIO.setup(mot2_Dir, GPIO.OUT)
+	#pid1 = os.getpid()
+	#q2.put(pid1)
+	steps = proc_queue2.get()
+	for x in range (0, steps):
+			GPIO.output(mot2_step, GPIO.LOW)
+			time.sleep(0.0005)
+			GPIO.output(mot2_step, GPIO.HIGH)
+			time.sleep(0.0005)
+	GPIO.cleanup()	
+	r2.put(1)   
+	time.sleep(1)
+	sys.exit(1)	
+
 def volume_check(dispense_volume, check = True):
 	# checks how much volume there is in syringe 1
 	distance = pot.read_adc_difference(p1_channel, gain=GAIN)
@@ -736,11 +773,11 @@ def syringe_motor_1(volume, direction):
 	# controls motor for syringe 1
 	steps = int((volume + 0.000785) / 0.0000502)
 	p.put(steps)
-	# if spi_1.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
-	# 	spi_1.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
+	if spi_1.xfer2([CMD['READ'] | REG['CR0'], 0])[1] != 0b10001000:    # compensated half step
+		spi_1.writebytes([CMD['WRITE'] | REG['CR0'], 0b10001000])
 		
-	# if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
-	# 	spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
+	if spi_1.xfer2([CMD['READ'] | REG['CR2'], 0])[1] != 0b10000000:
+		spi_1.writebytes([CMD['WRITE'] | REG['CR2'], 0b10000000])
 
 	# 0 = refill/retract
 	# 1 = dispense
@@ -884,6 +921,7 @@ def Output_p2():
 		empty_queue()
 
 def Retract5ml():
+	# takes the syringe back in by 5 ml of distance
 	if tkMessageBox.askyesno('proceed', 'Do you want to Retract syringe#1 by 5 ml?'):
 		syringe_motor_1(5, 0)
 		valve_control('Hardness', 'OFF')	
@@ -981,43 +1019,9 @@ def Empty_both():
 		else:
 			tkMessageBox.showinfo('Empty', 'Both Syringes are Empty. Please Refill')				
 			
-def dispense_loop():
-	GPIO.setwarnings(False)
-	GPIO.setmode(GPIO.BOARD)
-	GPIO.setup(mot1_step, GPIO.OUT)
-	GPIO.setup(mot1_Dir, GPIO.OUT)
-	#pid1 = os.getpid()
-	#q.put(pid1)Dispense_step_volume
-	steps = p.get()
-	for x in range (0, steps):
-			GPIO.output(mot1_step, GPIO.LOW)
-			time.sleep(0.0005)
-			GPIO.output(mot1_step, GPIO.HIGH)
-			time.sleep(0.0005)
-	GPIO.cleanup()	
-	r.put(1)   
-	time.sleep(1)
-	sys.exit(1)
-	
-def dispense_loop_p2():
-	GPIO.setwarnings(False)
-	GPIO.setmode(GPIO.BOARD)
-	GPIO.setup(mot2_step, GPIO.OUT)
-	GPIO.setup(mot2_Dir, GPIO.OUT)
-	#pid1 = os.getpid()
-	#q2.put(pid1)
-	steps = proc_queue2.get()
-	for x in range (0, steps):
-			GPIO.output(mot2_step, GPIO.LOW)
-			time.sleep(0.0005)
-			GPIO.output(mot2_step, GPIO.HIGH)
-			time.sleep(0.0005)
-	GPIO.cleanup()	
-	r2.put(1)   
-	time.sleep(1)
-	sys.exit(1)	
-	
+
 def empty_queue():
+	# clears multiproccessing queue
 	global barupdate_id
 	global p1
 	qid = root.after(500, empty_queue)
@@ -1050,6 +1054,7 @@ def empty_queue_p2():
 		pass
 				
 def top_close():
+	# closes process
 	global barupdate_id
 	global p1
 	tid = root.after(500, top_close)
@@ -1109,6 +1114,7 @@ def popup_window(dmsg, pump):
 			msg.config(text="Please wait until system Refill's syringe#2")	
 		
 def button_call():
+	# ??
 	if (Titration_loop.running_titration == False and Manbar.instate(['selected']) == False and 
 		bar1.instate(['selected']) == False and bar2.instate(['selected']) == False and 
 		bar3.instate(['selected']) == False and bar4.instate(['selected']) == False and 
@@ -1555,6 +1561,9 @@ model = pickle.load(open(filename, 'rb'))
 global conc_top
 conc_top = None
 class Titration_loop:
+	'''
+	titrations for hardness and alkalinity
+	'''
 	titration_type = None
 	acid_base_type = None
 	p3 = None
@@ -1720,6 +1729,8 @@ class Titration_loop:
 			entry.bind('<Button-1>', Topfocus)
 		
 		titre_type = methodvar.get()
+
+		# presets for titrations
 		if titre_type == 'Alkalinity':
 			unitvar.set('M')
 			predose_vol.set('0.9')
@@ -1732,6 +1743,9 @@ class Titration_loop:
 			titrant_conc.set('0.01')
 			
 	def titration_go(self):
+		'''
+		starts titrations depending on whats selected in the message box
+		'''
 		global conc_top
 		conc_top.destroy()
 		titration_type = methodvar.get()
@@ -1829,6 +1843,7 @@ class Titration_loop:
 			titration_button.config(text = "START")				
 		
 	def Refill(self):
+		# refills syringes after titration is completed
 		#if tkMessageBox.askyesno("Refill", "Place the refill solution under the pump#1 dispense line "):
 		valve_control('Hardness', 'ON')
 		distance = pot.read_adc_difference(p1_channel, gain=GAIN)
@@ -2006,6 +2021,7 @@ class Titration_loop:
 					self.Refill()		
 			
 	def alkalinity(self):
+		# hcl titration
 		Titration_loop.titration_type = "alkalinity"
 		pH = self.Read_pH()
 		if pH < 4.3:   
@@ -2100,6 +2116,7 @@ class Titration_loop:
 				self.Refill_p2()		
 	
 	def Hardness(self, refill = False):
+		# edta titration
 		Titration_loop.color = True
 		Titration_loop.titration_type = 'Hardness'
 		condition = []	
@@ -2229,6 +2246,7 @@ class Titration_loop:
 				self.Refill()		
 		
 	def Colorimetry(self):
+		# inactive
 		Titration_loop.color = True
 		Titration_loop.titration_type = 'Colorimetry'
 		condition = []	
@@ -2430,8 +2448,10 @@ class Titration_loop:
 						tkMessageBox.showinfo('Done', 'Titration Aborted')					
 			except Empty:
 				pass	
-				
-		
+# end of titration class --------------------------------------------------------------
+
+
+
 def start_titration():
 	if titration_button['text'] == "START":
 		end_vol_update.config(text = '0.0')
@@ -2499,6 +2519,9 @@ def get_pH():
 Titration = Titration_loop()
 
 class Create_table:
+	'''
+	creates tables with all previous data collected on alkalinity and hardness
+	'''
 	def __init__(self):
 		report_subframe_Hardness = Frame(Hardness_mainframe)
 		report_subframe_Hardness.pack(fill=BOTH, expand=1)
@@ -2529,8 +2552,6 @@ class Create_table:
 		self.table_Alkalinity.redraw()
 		return
 		
-Report = Create_table()	
-
 Report = Create_table()	
 
 style.use("ggplot")
@@ -2610,6 +2631,7 @@ toolbar.update()
 canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=True)
 
 def sys_check():
+	# checks system at program launch 
 	chk_top = Toplevel()
 	chk_top.title("Status Check")
 	chk_top.config(bg="white")
